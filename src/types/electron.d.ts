@@ -516,6 +516,10 @@ export interface IElectronAPI {
     clipboardSet: (data: ClipboardData) => Promise<void>;
     clipboardGet: () => Promise<ClipboardData | null>;
     clipboardClear: () => Promise<void>;
+    /** 读取系统剪贴板中的本地文件（text/uri-list）或图片；无内容返回 null */
+    clipboardReadExternal: () => Promise<ClipboardData | null>;
+    /** 把文件路径写入系统剪贴板（text/uri-list），供外部应用粘贴 */
+    clipboardWriteFiles: (paths: string[]) => Promise<void>;
     onClipboardChange: (callback: (data: ClipboardData | null) => void) => () => void;
     getStartupPath: () => Promise<string | null>;
     /**

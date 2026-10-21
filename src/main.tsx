@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import './material-web'
 import App from './App.tsx'
-import { FilePickerRoot } from './components/FilePicker.tsx'
+import { FilePickerRoot } from './components/picker/FilePickerRoot.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import { MIN_UI_SCALE, MAX_UI_SCALE } from './hooks/useUiZoom'
 

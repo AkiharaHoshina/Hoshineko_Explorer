@@ -971,6 +971,9 @@ export const ObjectPanel: React.FC<ObjectPanelProps> = ({
    *  历史长度 = sparklineWindowSeconds ÷ 采样间隔（设置可调）。 */
   useEffect(() => {
     if (!parsed?.instanceId || !currentInstance) return;
+    // 隐藏标签页常驻 DOM：非活动标签页不得继续 1s/2s 轮询（多标签页时
+    // 会叠加出可观的空闲 CPU/IO；切回时 effect 重新挂载立即补一次 tick）
+    if (isActive === false) return;
     const kind = currentInstance.kind;
     if (kind === 'tty') return;
     if (readingPaused) return;
@@ -1062,7 +1065,7 @@ export const ObjectPanel: React.FC<ObjectPanelProps> = ({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [parsed, currentInstance, readingPaused, sparklineWindowSeconds, alertTempC, alertDiskPct]);
+  }, [parsed, currentInstance, readingPaused, isActive, sparklineWindowSeconds, alertTempC, alertDiskPct]);
 
   /**
    * review 25 ④：跨窗口/标签页对象写同步——其他窗口写入成功经主进程

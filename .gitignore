@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 dist-electron
 release
+release-size
 test_large_dir
 *.AppImage
 *.pkg.tar.zst

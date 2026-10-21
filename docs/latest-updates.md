@@ -1,5 +1,76 @@
 # 更新日志
 
+## v3.0.1002
+
+- 版本号升至 `3.0.1002`。
+- 包含本分支已落地的修复：Ctrl+C/X/V 全局粘贴、外部文件/图片剪贴板、
+  AMD GPU sysfs 兜底、Ctrl 角标复位、图标字体子集化、重型组件懒加载、
+  20k 目录 MIME 探测提速、`usocket` postinstall 清理、npm 12
+  `allowScripts` 适配、设置页懒加载 CSS 修复（详见下方 v3.0.1001 条目）。
+- AppImage 产物名随版本变为 `HoshinekoFM-3.0.1002.AppImage` /
+  `HoshinekoFM-3.0.1002-size.AppImage`（需重新构建）。
+
+## v3.0.1001 — 粘贴 / GPU / Ctrl 角标修复 + 性能与拆分第一批
+
+- **npm 12 安装策略适配**：`package.json` 增加 `allowScripts`
+  （放行 esbuild/node-pty，拒绝 electron-winstaller/usocket），避免
+  `npm i` 后 esbuild 二进制与 node-pty 原生模块缺失；`.npmrc` 移除
+  npm 12 已废弃的 `electron_builder_binaries_mirror` 键，镜像改由
+  `ELECTRON_MIRROR` / `ELECTRON_BUILDER_BINARIES_MIRROR` 环境变量传递。
+  非破坏性 `npm audit fix` 已应用（Vite 等），剩余 dbus-next 传递依赖
+  需 `--force` 降级，未执行。
+- **修复主进程 `util.isError is not a function` 崩溃**：`npm install` 会把
+  `usocket`（dbus-next 的 optional dependency）装回来；它是 2016 年的包，
+  在 Node 24（Electron 43）下 D-Bus 握手即抛异常，表现为主进程 JS 错误
+  弹窗、D-Bus 接线中断、快捷键失效。新增
+  `scripts/remove-usocket.cjs` 并挂到 `postinstall`，安装后自动删除顶层与
+  嵌套 `usocket`；dbus-next 回退 `net.Socket`。已重建两个 AppImage，
+  `app.asar` 内不再包含 `usocket`。
+- **Ctrl+V 粘贴修复**：`Ctrl+C/X/V` 从「文件区分区守卫之后」移到之前——
+  复制后经侧边栏/标签页/返回上级导航（焦点不在文件区）再粘贴不再静默失效；
+  输入框/对话框守卫保留（地址栏文本粘贴不受影响）。
+- **外部剪贴板粘贴**：应用内剪贴板为空时读取系统剪贴板 `text/uri-list`
+  （Electron clipboard 优先，`wl-paste`/`xclip` 兜底），把 GTK/Qt 文件
+  管理器复制的本地文件复制进当前目录；首次粘贴后写入内部剪贴板，
+  右键菜单/其他窗口可继续粘贴。新 IPC `clipboard:read-external`。
+  **图片数据回退**：无文件 URI 时读 `clipboard.readImage()`，落地为
+  `app.getPath('temp')/hoshineko-clipboard/clipboard-<ISO>.png` 后按文件
+  粘贴——浏览器「复制图片」/截图可直接得到 PNG 文件（24h 旧文件自动清理）。
+- **应用 → 外部剪贴板**：Ctrl+C/X 同时经 `clipboard:write-files` 写系统
+  `text/uri-list`，外部文件管理器/聊天应用可粘贴真实文件。Electron 每次
+  `writeBuffer` 会替换整个剪贴板（实测无法同时保留 text/plain），故只写
+  uri-list；剪切对外表现为复制，内部仍按 cut 移动。
+- **AMD GPU 无 rocm-smi 兜底**：`listGpuObjects` 在 AMD 工具缺失/无输出时
+  改用 `/sys/class/drm` 枚举（lspci 命名），读数走 `gpu_busy_percent` +
+  `hwmon/temp1_input` + `mem_info_vram_*`；本机 Strix APU（Radeon 880M/890M）
+  实测显示「利用率 6% · 显存 2.0/8.0 GB · 37°C」。各厂商分支独立容错，
+  单个工具失败不再清空整类。
+- **Ctrl 序号角标残留**：keyup 改捕获阶段（穿过终端/对话框的
+  stopPropagation），并补 `window blur` / `visibilitychange` 兜底复位。
+- **性能第一批**：
+  - Material Symbols 图标字体按实际使用图标子集化：5.23 MB → 185 KB
+    （`scripts/subset-icons.py`，`npm run icons:subset`；新增图标须重跑）。
+  - `TerminalPanel` / `ObjectPanel` / `FilePreviewPanel` 懒加载：主 chunk
+    2.16 MB → 1.76 MB，xterm 338 KB 只在首次打开终端时加载。
+  - 目录 MIME 批量探测：magic-byte 探测 32 路并发、`file` 批大小 200 → 1000；
+    20k 文件目录导航实测 2.4 s → 1.26 s。
+  - 对象面板实例页轮询加 `isActive` 守卫（隐藏标签页不再 1–2 s 轮询）。
+  - 新增 `DEFAULT_TERMINAL_HEIGHT` 独立模块（从懒加载组件导入常量会把
+    整个终端模块拉回首屏）。
+  - **AppImage 双版本**：electron-builder 的 `compression: "store"` 对
+    AppImage 目标不生效；`npm run electron:build` 先出 gzip 包，再由
+    `scripts/repack-appimage-store.cjs`（unsquashfs + mksquashfs）
+    重打包为无压缩 store 版 → `release/`（约 550 MB，窗口出现 ~0.9s），
+    原 gzip 版保留到 `release-size/HoshinekoFM-<版本>-size.AppImage`
+    （约 266 MB，1.9–3.7s）。实测解包/无压缩 ~0.9s；1 MB gzip 块反而
+    6.5s（已排除）。store 包的 `unsquashfs -s` 仍标 gzip，以
+    `Data is uncompressed` 判断。
+- **拆分第一批**（详见 `docs/代码拆分可行性报告.md`）：`FilePickerRoot`、
+  `PickerFooter` 抽出；后续按 P2–P6 分阶段拆 App / ExplorerTab / FilePicker。
+- **验证**：`npm run build` 通过；e2e 06/08/13/23/72/93/107 全绿；
+  临时用例覆盖「复制/剪切后经上级导航粘贴」「外部 text/uri-list 粘贴」
+  「Ctrl keyup/blur 角标复位」「本机真实 AMD GPU 枚举与读数」。
+
 ## v0.11.50-dev — review 29：设置精修（15 项）
 
 - 预览吸顶贴地址栏（滚动容器/顶栏上边距归 0）；图标大小滑条松手生效；

@@ -31,11 +31,24 @@ export const ClipboardProvider: React.FC<{ children: ReactNode }> = ({ children 
   const copy = (files: IFile[]) => {
     setClipboard({ files, operation: 'copy' });
     window.electron?.clipboardSet({ files, operation: 'copy' });
+    // 同时写入系统剪贴板 text/uri-list：外部文件管理器/聊天应用可粘贴
+    // 真实文件（图片同样按文件语义）。虚拟路径（objects:// 等）由主进程
+    // 过滤（只接受绝对路径），不会写出无效 URI。
+    // **方法本身也走可选调用**：开发时渲染层热更新而 preload 仍是旧版
+    // （旧 preload 没有 clipboardWriteFiles），直接调用会抛
+    // `... is not a function`；内部剪贴板不应因此失效。
+    void window.electron?.clipboardWriteFiles?.(files.map((f) => f.path))?.catch?.(() => {
+      /* 平台不支持自定义 MIME：内部剪贴板仍可用 */
+    });
   };
 
   const cut = (files: IFile[]) => {
     setClipboard({ files, operation: 'cut' });
     window.electron?.clipboardSet({ files, operation: 'cut' });
+    // 外部剪贴板只表达文件列表；对外表现为复制（内部仍按 cut 移动）
+    void window.electron?.clipboardWriteFiles?.(files.map((f) => f.path))?.catch?.(() => {
+      /* 同上 */
+    });
   };
 
   const clear = () => {

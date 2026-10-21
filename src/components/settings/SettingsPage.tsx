@@ -29,6 +29,11 @@ import {
   AboutSettings,
   BuiltInTerminalSettings,
 } from './SettingsCategoryPages';
+// 设置页复用对象面板的 .object-panel-header/.object-panel-title/
+// .object-search-* 类；ObjectPanel 现在是懒加载组件，它的 CSS 只在对象页
+// 首次打开时随 chunk 注入。设置页必须 eager 引入这份共享样式，否则标题
+// 间距、搜索命中行高等布局会回退（e2e 103a/f/k/l 实测）。
+import '../ObjectPanel.css';
 import './SettingsPage.css';
 
 interface SettingsPageProps {

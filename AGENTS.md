@@ -14,6 +14,9 @@
 No `typecheck` script — run `npx tsc -b` or `npx tsc --noEmit` for type-checking.
 No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-process driven, no deps; see below).
 
+- **npm 12 install-scripts 审批**：`package.json` 的 `allowScripts` 必须保留 `esbuild: true`、`node-pty: true`（否则 Vite 构建缺 esbuild 二进制、终端原生模块不编译）；`electron-winstaller: false`、`usocket: false` 为显式拒绝。`npm install-scripts ls` 应显示 “No packages with unreviewed install scripts”。换 Node/npm 版本后若报脚本被拦截，先检查这里。
+- **镜像配置只走环境变量**：npm 12 起 `.npmrc` 的自定义键会告警/废弃——`ELECTRON_MIRROR`、`ELECTRON_BUILDER_BINARIES_MIRROR` 通过环境变量传入（见 `.npmrc` 注释），不要再写回配置文件。
+
 ## e2e 测试（scripts/e2e/）
 
 - 运行：`npm run e2e`（先 build 保证测最新产物）；单跑：`npx electron scripts/e2e/<name>.test.cjs`。
@@ -32,7 +35,7 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
   - **平铺 WM 下无最小化入口**：检测到 tiling（i3/sway/hyprland/niri 等）时右侧最小化按钮与 v 菜单「最小化」项隐藏（`TitleBar hideMinimize`），且主进程 `window:minimize` no-op 兜底——断言控制区按钮数/下标、最小化行为前先确认当前检测环境（`detectWindowManager` 在 invoke 时读 `process.env.XDG_CURRENT_DESKTOP`，e2e 测试进程即主进程，可直接改环境变量切换分支，e2e 15 用 GNOME 覆盖堆叠分支）。**v 菜单结构（v0.11.45 起）**：新建窗口（`window:new`，经 `registerWindowHandlers` 第二个可选参数注入 createWindow 工厂——harness 同款接线注入 createTestWindow；点击后菜单由 ContextMenu 统一关闭）/ 最大化（最大化时切「还原」）/ 最小化 / 退出——平铺三条目（18/18/22 图标字号）、堆叠四条目，e2e 15 已按此断言并回归「新建窗口」点击（第二窗口打开于仪表盘标题）。
   - **三态开关（跟随系统/开/关）模式**：标题栏（SettingsDialog）与明暗主题（ThemeColorDialog）同款——md-switch 必须纯展示化（pointer-events:none + 内部 input 移出 Tab 序），交互由外层 `role=switch` 容器接管，草稿只经函数式更新；直接给受控 md-switch 挂 onClick 会有内部 checkbox 状态机与 React 受控赋值的时序竞争（跟随模式「点两次才生效」）。语义：跟随系统按钮→null；手动点开关→取反；跟随模式点开关→退出跟随+新值=生效值的反。**新增同款开关必须遵循 `docs/跟随系统设置项目逻辑.md`**。
   - **portal 后端总线名**：e2e 用**进程级随机名** `…hoshineko.e2e.p<pid>.r<随机>`（`h.E2E_PORTAL_BUS_NAME` / `h.E2E_FM1_BUS_NAME`，harness 经 backends.js 注册），避免与运行中的应用实例/残留 e2e 进程抢名；后端就绪断言 `await h.getBackendRegistration()` 返回值（本进程注册状态），**不要用 GetNameOwner 轮询**（只证明名字有主、不证明主是本进程）。
-  - **不要重新引入 `usocket` 依赖**（曾为直接依赖，已移除）：dbus-next 把它当 optional 依赖，仅用于 FD 传递/abstract 套接字；其原生 addon（uwrap.node，2016 年代）在 Electron 43 下有 libuv 句柄 use-after-free——`bus.disconnect()` 时偶发 SIGSEGV（uv__finish_close 写已释放的关闭队列指针）或退出时主线程死循环挂起，且泄漏总线连接 FD（僵尸占名根因之一）。移除后 dbus-next 自动回退 `net.Socket`（`unix:path=` 总线地址不受影响；abstract 地址的旧 X11 会话会注册失败，属已知取舍）。应用从未启用 negotiateUnixFd。
+  - **不要重新引入 `usocket` 依赖**（曾为直接依赖，已移除）：dbus-next 把它当 optional 依赖，仅用于 FD 传递/abstract 套接字；其原生 addon（uwrap.node，2016 年代）在 Electron 43 下有 libuv 句柄 use-after-free——`bus.disconnect()` 时偶发 SIGSEGV（uv__finish_close 写已释放的关闭队列指针）或退出时主线程死循环挂起，且泄漏总线连接 FD（僵尸占名根因之一）。**Node 24 还移除了 `util.isError`：usocket 在 D-Bus 握手 `USocket._write` 直接抛 `TypeError: util.isError is not a function`（主进程弹 “A JavaScript error occurred in the main process”，D-Bus 接线中断、快捷键看似全失效）。** 因此 `package.json` 加了 `postinstall: node scripts/remove-usocket.cjs`（删除顶层与嵌套 `usocket`，幂等）；`npm/pnpm install` 后必须确认 `npm ls usocket` 为空。移除后 dbus-next 自动回退 `net.Socket`（`unix:path=` 总线地址不受影响；abstract 地址的旧 X11 会话会注册失败，属已知取舍）。应用从未启用 negotiateUnixFd。打包后也要用 `@electron/asar` 检查 `app.asar` 内无 `usocket`。
   - **会话总线重启按钮**（设置页**常驻**）：`system:restart-session-bus` 依次尝试 `systemctl --user restart dbus-broker.service` / `dbus.service`（30s 超时），成功后经 `registerSystemHandlers(onSessionBusRestarted)` 回调延迟 2.5s 重新注册后端并作废冲突缓存（`resetBackendConflictCache`）；e2e 37 用 PATH 前置假 systemctl 测 IPC 契约，**绝不重启真实总线**。
   - **portal 冲突警告弹窗**（每次会话一次，带 backdrop 遮罩的 AlertDialog）：portal 后端冲突（outdated/noVersion/unresponsive）不再用 toast——启动查询与设置打开刷新都经 `maybeAlertPortalConflict`（ref 守卫防重复），详情仍常驻设置页「系统集成」行副标题。
   - **保存器重名冲突**：FilePicker 保存模式确认（按钮/文件名输入 Enter/双击文件）都先 `checkSaveConflict`（existsBatch 以真实文件系统为准）——目标存在则弹与复制/移动同款 `ConflictDialog`（`operation="save"`：skip 模式改标「覆盖」）。覆盖 = 原名回传；自动/手动重命名 = 安全名/编辑名回传；手动留空不解析（弹窗保持）。e2e 38 覆盖此链路。
@@ -181,6 +184,19 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
 - **`noUnusedLocals` / `noUnusedParameters`**: both enabled in frontend tsconfig — unused vars/params cause compile errors.
 - **CSS**: flat `.css` files in same directory as component, imported in component file.
 - **Web Components**: Material 3 UI uses `@material/web` custom elements (e.g., `<md-filled-button>`, `<md-dialog>`). Import any new component in `src/material-web.ts`.
+
+## v3.0.1002 约定（粘贴 / GPU / 图标 / 性能 / 拆分 / npm 策略）
+
+- **剪贴板快捷键必须在键盘分区守卫之前**：`Ctrl+C/X/V` 与 `Ctrl+A` 同属全局文件操作——从文件区复制后经侧边栏/标签页/返回上级导航（焦点落在非 files 分区）再按 `Ctrl+V`，若放在 zone guard 之后会静默失效（用户反馈的根因）。输入框/对话框守卫仍在其上（地址栏文本粘贴不受影响）。改动 ExplorerTab 键盘顺序时先看 e2e 08 + 临时 P1/P2 用例。
+- **外部剪贴板粘贴**： `clipboard:read-external`（window.ts）读系统剪贴板 `text/uri-list`——Electron `clipboard.read/readBuffer('text/uri-list')` 优先，`wl-paste`/`xclip` 兜底；只接受本地 `file://`（`localhost` 视为本地），`fs.stat` 失败的陈旧路径跳过。**没有文件 URI 时回退剪贴板图片**：`clipboard.readImage()` 非空则落地为 `app.getPath('temp')/hoshineko-clipboard/clipboard-<ISO>.png`（顺手清理 24h 前旧图），按普通文件粘贴——浏览器「复制图片」/截图可直接粘贴成 PNG 文件。前端 `executePasteAction` 仅在内部剪贴板为空时调用，成功后 `clipboardSet` 回写内部剪贴板。纯文本仍不当作文件粘贴。
+- **应用 → 外部剪贴板**：`clipboardWriteFiles`（`clipboard:write-files`）在 Ctrl+C/X 时把绝对路径写成 `text/uri-list`，外部文件管理器/聊天应用可粘贴真实文件。**实测 Electron `writeBuffer` 每次写入替换整个剪贴板**（无法同时保留 text/plain 与 uri-list），因此只写 `text/uri-list`；剪切在外部表现为复制（内部 operation='cut' 仍移动）。虚拟路径（objects:// 等）由主进程按 `startsWith('/')` 过滤。
+- **AppImage 双版本打包**：electron-builder 的 `compression: "store"` **对 AppImage 目标不生效**（实测产物仍是 gzip）。默认 `npm run electron:build` 先出 gzip AppImage，再由 `scripts/repack-appimage-store.cjs` 用 `unsquashfs`/`mksquashfs` 重打包为无压缩 store 版 → `release/HoshinekoFM-<版本>.AppImage`（约 550 MB，启动 ~0.9s），原 gzip 版保留为 `release-size/HoshinekoFM-<版本>-size.AppImage`（约 266 MB，启动 1.9–3.7s）。实测冷启动瓶颈是 AppImage gzip 解压（解包后/无压缩镜像均 ~0.9s；1MB gzip 块反而 6.5s，勿调大 block）。store 重打包后 `unsquashfs -s` 仍显示 `Compression gzip`，但看 `Data is uncompressed` 判断（脚本据此幂等跳过）。当前 AppImage runtime 只支持 xz/zlib，zstd 需换新版 appimagetool。
+- **AMD GPU 工具无关兜底**：rocm-smi 在多数发行版默认不装（AMD APU 尤其常见）。`listGpuObjects` 的 AMD 分支在工具缺失/无输出时走 `listAmdGpuObjectsFromSysfs`（`/sys/class/drm/card*` vendor 0x1002 + lspci 命名），`readGpuReading` 的 amd 分支先读 sysfs（`gpu_busy_percent` / `hwmon/temp1_input` / `mem_info_vram_{used,total}`），全部字段缺失才回落 rocm-smi（e2e 106 的空 DRM 沙箱路径）。各厂商分支独立 try/catch——单个工具异常不得清空整类（旧实现最外层 catch 会连带隐藏 Intel）。
+- **Material Symbols 子集字体**：`src/index.css` 不再 import `@fontsource-variable/material-symbols-rounded/full.css`，改用 `src/assets/fonts/MaterialSymbolsRounded-subset.woff2`（185 KB）。生成脚本 `scripts/subset-icons.py` 解析 GSUB 连字（`pyftsubset` 直接 `--text` + 默认闭包会把全部图标拉回来，必须按命中的输出字形 `--glyphs-file` + `--no-layout-closure`）。**新增图标后必须 `npm run icons:subset` 并提交字体文件**，依赖 python fontTools + brotli。验证手法：canvas 以 `24px "Material Symbols Rounded Variable"` 量 `folder`/`arrow_upward` 宽度应为单个字形（≈24px），不是字母串宽度。
+- **懒加载边界**：`TerminalPanel` / `ObjectPanel` / `FilePreviewPanel` 已 `React.lazy`。从懒加载组件导入**常量/类型**会重新拉回主 chunk——非组件导出放独立小模块（如 `terminalConstants.ts`）。对象面板只在 objects:// 分支渲染、终端只在 `terminalOpen`、预览只在开关打开时挂载，懒加载才有效（勿改成无条件渲染）。
+- **目录 MIME 批量探测性能**：`detectMimeBatch` 的 magic-byte 探测按 `FAST_MIME_CONCURRENCY=32` 并发（旧实现逐个 await，20k 文件打开就要 1–2 s），`file --mime-type` 批大小 `BATCH_CHUNK_SIZE=1000`（旧 200 = 20k 文件 spawn 100 次）。`file` 本身很快（20k ≈ 80 ms），别再缩小批大小。
+- **对象实例页轮询必须 `isActive` 门控**：隐藏标签页常驻 DOM，旧 tick 在非活动标签页仍每 1–2 s 读一次对象。新增轮询/定时器一律检查 `isActive === false` 早退（切回时 effect 重挂立即补 tick）。
+- **拆分约定**：见 `docs/代码拆分可行性报告.md`。拆组件时保留原类名/DOM 结构（e2e 选择器与软件渲染坐标敏感），常量独立模块，回调 useCallback，单阶段提交并跑对应 e2e；不改变隐藏标签页常驻、无路由、SettingsContext 单一数据源三条模型。
 
 ## 注意事项
 

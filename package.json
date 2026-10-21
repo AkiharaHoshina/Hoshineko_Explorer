@@ -1,7 +1,7 @@
 {
   "name": "hoshineko-fm",
   "private": true,
-  "version": "3.0.1001",
+  "version": "3.0.1002",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -9,9 +9,12 @@
     "build": "tsc -b && vite build && tsc -p electron/tsconfig.json",
     "lint": "eslint .",
     "preview": "vite preview",
+    "postinstall": "node scripts/remove-usocket.cjs",
     "e2e": "npm run build && for f in scripts/e2e/*.test.cjs; do npx electron \"$f\" || exit 1; done",
+    "icons:subset": "python3 scripts/subset-icons.py",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on tcp:5173 && tsc -p electron/tsconfig.json && node scripts/set-cjs.cjs && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "npm run build && node scripts/set-cjs.cjs && electron-builder"
+    "electron:build": "npm run build && node scripts/set-cjs.cjs && electron-builder && node scripts/repack-appimage-store.cjs",
+    "electron:build:size": "npm run build && node scripts/set-cjs.cjs && electron-builder -c.compression=normal -c.directories.output=release-size -c.artifactName='HoshinekoFM-${version}-size.${ext}'"
   },
   "dependencies": {
     "@fontsource-variable/material-symbols-rounded": "^5.2.45",
@@ -94,5 +97,11 @@
       "category": "Utility",
       "icon": "assets/icon.png"
     }
+  },
+  "allowScripts": {
+    "electron-winstaller": false,
+    "esbuild": true,
+    "node-pty": true,
+    "usocket": false
   }
 }
