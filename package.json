@@ -12,7 +12,8 @@
     "e2e": "npm run build && for f in scripts/e2e/*.test.cjs; do npx electron \"$f\" || exit 1; done",
     "icons:subset": "python3 scripts/subset-icons.py",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on tcp:5173 && tsc -p electron/tsconfig.json && node scripts/set-cjs.cjs && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "npm run build && node scripts/set-cjs.cjs && electron-builder"
+    "electron:build": "npm run build && node scripts/set-cjs.cjs && electron-builder && node scripts/repack-appimage-store.cjs",
+    "electron:build:size": "npm run build && node scripts/set-cjs.cjs && electron-builder -c.compression=normal -c.directories.output=release-size -c.artifactName='HoshinekoFM-${version}-size.${ext}'"
   },
   "dependencies": {
     "@fontsource-variable/material-symbols-rounded": "^5.2.45",

@@ -146,14 +146,18 @@ scheme-monochrome：单色/黑白灰调。
    npm run electron:dev
    ```
 
-4. 构建为成品包:
+4. 构建为成品包（二选一）:
    ```bash
-   npm run electron:build
+   npm run electron:build       # 启动优先：无压缩 AppImage，约 550 MB，冷启动约 0.9 s
+   npm run electron:build:size  # 体积优先：gzip AppImage，约 266 MB，冷启动约 2–4 s
    ```
+   体积优先版输出到 `release-size/HoshinekoFM-<版本>-size.AppImage`。
+   启动优先版由 `scripts/repack-appimage-store.cjs` 在 electron-builder 之后
+   重打包为无压缩 squashfs（需要系统安装 `squashfs-tools`）。
 
 ## 测试
 
-端到端测试位于 `scripts/e2e/`（39 套用例，无测试框架——Electron 自身驱动真实构建，`sendInputEvent` 模拟输入、`executeJavaScript` 断言）：
+端到端测试位于 `scripts/e2e/`（110 套用例，无测试框架——Electron 自身驱动真实构建，`sendInputEvent` 模拟输入、`executeJavaScript` 断言）：
 
 ```bash
 npm run e2e                # 先构建，再依次运行 scripts/e2e/*.test.cjs

@@ -9,6 +9,13 @@
   （Electron clipboard 优先，`wl-paste`/`xclip` 兜底），把 GTK/Qt 文件
   管理器复制的本地文件复制进当前目录；首次粘贴后写入内部剪贴板，
   右键菜单/其他窗口可继续粘贴。新 IPC `clipboard:read-external`。
+  **图片数据回退**：无文件 URI 时读 `clipboard.readImage()`，落地为
+  `app.getPath('temp')/hoshineko-clipboard/clipboard-<ISO>.png` 后按文件
+  粘贴——浏览器「复制图片」/截图可直接得到 PNG 文件（24h 旧文件自动清理）。
+- **应用 → 外部剪贴板**：Ctrl+C/X 同时经 `clipboard:write-files` 写系统
+  `text/uri-list`，外部文件管理器/聊天应用可粘贴真实文件。Electron 每次
+  `writeBuffer` 会替换整个剪贴板（实测无法同时保留 text/plain），故只写
+  uri-list；剪切对外表现为复制，内部仍按 cut 移动。
 - **AMD GPU 无 rocm-smi 兜底**：`listGpuObjects` 在 AMD 工具缺失/无输出时
   改用 `/sys/class/drm` 枚举（lspci 命名），读数走 `gpu_busy_percent` +
   `hwmon/temp1_input` + `mem_info_vram_*`；本机 Strix APU（Radeon 880M/890M）
@@ -26,6 +33,14 @@
   - 对象面板实例页轮询加 `isActive` 守卫（隐藏标签页不再 1–2 s 轮询）。
   - 新增 `DEFAULT_TERMINAL_HEIGHT` 独立模块（从懒加载组件导入常量会把
     整个终端模块拉回首屏）。
+  - **AppImage 双版本**：electron-builder 的 `compression: "store"` 对
+    AppImage 目标不生效；`npm run electron:build` 先出 gzip 包，再由
+    `scripts/repack-appimage-store.cjs`（unsquashfs + mksquashfs）
+    重打包为无压缩 store 版 → `release/`（约 550 MB，窗口出现 ~0.9s），
+    原 gzip 版保留到 `release-size/HoshinekoFM-<版本>-size.AppImage`
+    （约 266 MB，1.9–3.7s）。实测解包/无压缩 ~0.9s；1 MB gzip 块反而
+    6.5s（已排除）。store 包的 `unsquashfs -s` 仍标 gzip，以
+    `Data is uncompressed` 判断。
 - **拆分第一批**（详见 `docs/代码拆分可行性报告.md`）：`FilePickerRoot`、
   `PickerFooter` 抽出；后续按 P2–P6 分阶段拆 App / ExplorerTab / FilePicker。
 - **验证**：`npm run build` 通过；e2e 06/08/13/23/72/93/107 全绿；

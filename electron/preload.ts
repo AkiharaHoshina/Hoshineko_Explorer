@@ -204,8 +204,10 @@ contextBridge.exposeInMainWorld('electron', {
   clipboardSet: (data: unknown) => ipcRenderer.invoke('clipboard:set', data),
   clipboardGet: () => ipcRenderer.invoke('clipboard:get'),
   clipboardClear: () => ipcRenderer.invoke('clipboard:clear'),
-  /** 读取系统剪贴板中的本地文件（text/uri-list）；无文件返回 null */
+  /** 读取系统剪贴板中的本地文件（text/uri-list）或图片；无内容返回 null */
   clipboardReadExternal: () => ipcRenderer.invoke('clipboard:read-external'),
+  /** 把文件路径写入系统剪贴板（text/uri-list），供外部应用粘贴 */
+  clipboardWriteFiles: (paths: string[]) => ipcRenderer.invoke('clipboard:write-files', paths),
   onClipboardChange: (callback: (data: unknown) => void) => {
     const handler = (_: Electron.IpcRendererEvent, data: unknown) => callback(data);
     ipcRenderer.on('clipboard:changed', handler);
