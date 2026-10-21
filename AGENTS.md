@@ -14,6 +14,9 @@
 No `typecheck` script — run `npx tsc -b` or `npx tsc --noEmit` for type-checking.
 No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-process driven, no deps; see below).
 
+- **npm 12 install-scripts 审批**：`package.json` 的 `allowScripts` 必须保留 `esbuild: true`、`node-pty: true`（否则 Vite 构建缺 esbuild 二进制、终端原生模块不编译）；`electron-winstaller: false`、`usocket: false` 为显式拒绝。`npm install-scripts ls` 应显示 “No packages with unreviewed install scripts”。换 Node/npm 版本后若报脚本被拦截，先检查这里。
+- **镜像配置只走环境变量**：npm 12 起 `.npmrc` 的自定义键会告警/废弃——`ELECTRON_MIRROR`、`ELECTRON_BUILDER_BINARIES_MIRROR` 通过环境变量传入（见 `.npmrc` 注释），不要再写回配置文件。
+
 ## e2e 测试（scripts/e2e/）
 
 - 运行：`npm run e2e`（先 build 保证测最新产物）；单跑：`npx electron scripts/e2e/<name>.test.cjs`。

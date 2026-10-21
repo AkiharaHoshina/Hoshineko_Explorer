@@ -97,5 +97,11 @@
       "category": "Utility",
       "icon": "assets/icon.png"
     }
+  },
+  "allowScripts": {
+    "electron-winstaller": false,
+    "esbuild": true,
+    "node-pty": true,
+    "usocket": false
   }
 }

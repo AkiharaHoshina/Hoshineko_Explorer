@@ -2,6 +2,13 @@
 
 ## v3.0.1001 — 粘贴 / GPU / Ctrl 角标修复 + 性能与拆分第一批
 
+- **npm 12 安装策略适配**：`package.json` 增加 `allowScripts`
+  （放行 esbuild/node-pty，拒绝 electron-winstaller/usocket），避免
+  `npm i` 后 esbuild 二进制与 node-pty 原生模块缺失；`.npmrc` 移除
+  npm 12 已废弃的 `electron_builder_binaries_mirror` 键，镜像改由
+  `ELECTRON_MIRROR` / `ELECTRON_BUILDER_BINARIES_MIRROR` 环境变量传递。
+  非破坏性 `npm audit fix` 已应用（Vite 等），剩余 dbus-next 传递依赖
+  需 `--force` 降级，未执行。
 - **修复主进程 `util.isError is not a function` 崩溃**：`npm install` 会把
   `usocket`（dbus-next 的 optional dependency）装回来；它是 2016 年的包，
   在 Node 24（Electron 43）下 D-Bus 握手即抛异常，表现为主进程 JS 错误
