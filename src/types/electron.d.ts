@@ -516,6 +516,8 @@ export interface IElectronAPI {
     clipboardSet: (data: ClipboardData) => Promise<void>;
     clipboardGet: () => Promise<ClipboardData | null>;
     clipboardClear: () => Promise<void>;
+    /** 读取系统剪贴板中的本地文件（text/uri-list）；无文件返回 null */
+    clipboardReadExternal: () => Promise<ClipboardData | null>;
     onClipboardChange: (callback: (data: ClipboardData | null) => void) => () => void;
     getStartupPath: () => Promise<string | null>;
     /**

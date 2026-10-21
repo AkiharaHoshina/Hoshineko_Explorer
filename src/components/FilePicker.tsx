@@ -1,13 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ToastContainer } from 'react-toastify';
 import { FileList } from './FileList';
 import { Omnibar } from './Omnibar';
 import { SortControls, OMNIBAR_MIN_WIDTH_EXPANDED } from './SortControls';
 import { useTopBarWrap } from '../hooks/useTopBarWrap';
 import { useAutoSortCollapse } from '../hooks/useAutoSortCollapse';
 import { Sidebar, type SidebarPinnedItem } from './Sidebar';
-import { Button } from './Button';
-import { OutlinedSelect, SelectOption, OutlinedTextField } from './md';
 import { ContextMenu } from './ContextMenu';
 import type { ContextMenuItem } from './ContextMenu';
 import { Icon } from './Icon';
@@ -18,9 +15,7 @@ import { NameInputDialog } from './NameInputDialog';
 import { useDeviceActions } from '../hooks/useDeviceActions';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { parseSearchLimitStr } from '../utils/searchLimit';
-import { useUiZoom } from '../hooks/useUiZoom';
 import { useTitleBar } from '../hooks/useTitleBar';
-import { DragProvider } from '../contexts/DragContext';
 import { TitleBar } from './TitleBar';
 import { showToast } from '../utils/toast';
 import { sortFiles, sortFilesByDir } from '../utils/fileSort';
@@ -37,33 +32,8 @@ import { getMimeDisplayName } from '../utils/mimeTypes';
 import { isSearchPath, parseSearchPath, SEARCH_DEFAULT_LIMIT, SEARCH_DEFAULT_TIMEOUT, type SearchPathFilter } from '../utils/searchPath';
 import { SearchFilterBar } from './SearchFilterBar';
 import { SearchPendingOverlay } from './SearchPendingOverlay';
+import { PickerFooter } from './picker/PickerFooter';
 import './FilePicker.css';
-
-/**
- * 文件选择器窗口根组件：DragProvider + ToastContainer + 主题应用 + 界面缩放。
- * 由 main.tsx 在 ?mode=picker 时挂载（普通窗口挂载 App 主界面）。
- * 界面缩放与主窗口同键订阅：设置变更后经 storage 事件到达，
- * 选择器窗口立即应用相同缩放（preload 已应用首帧缩放）。
- */
-export const FilePickerRoot: React.FC = () => {
-  useUiZoom();
-  return (
-    <DragProvider>
-      <FilePicker />
-      <ToastContainer
-        position="bottom-right"
-        autoClose={5000}
-        hideProgressBar={false}
-        newestOnTop={false}
-        closeOnClick
-        pauseOnHover
-        theme="dark"
-        limit={5}
-        style={{ zIndex: 2000 }}
-      />
-    </DragProvider>
-  );
-};
 
 /**
  * 选择器搜索选项（与主窗口 SearchOptions 同形；limit/timeout 为临时值，
@@ -82,7 +52,7 @@ interface PickerSearchOptions extends SearchPathFilter {
  * - 中：Omnibar + 文件浏览区（单选/框选）
  * - 底：「取消」「选择」按钮；选择后经 resolvePicker 回传并关窗
  */
-const FilePicker: React.FC = () => {
+export const FilePicker: React.FC = () => {
   useLocale();
 
   const [config, setConfig] = useState<PickerConfig | null>(null);
@@ -1562,52 +1532,21 @@ const FilePicker: React.FC = () => {
         </main>
       </div>
 
-      <footer className="picker-footer">
-        {/* 左下角目录显示已删除（用户定案：删除选择器左下角的目录
-            显示）——选择模式仅在有选中时显示已选数量；保存模式的目标
-            绝对路径已由文件名输入框承载，右下角不再重复展示 */}
-        {!isSave && selected.size > 0 && (
-          <span className="picker-hint">
-            {t('picker.selected_count', selected.size)}
-          </span>
-        )}
-        {/* 文件类型过滤（与设置语言选择同款 OutlinedSelect）：
-            常驻显示——未声明 filters 时仅「所有文件」一项；
-            声明则「所有文件」+ 各类型。位于路径提示右侧，宽度自适应内容。
-            保存模式：换成同样大小的文件名输入框（portal 保存语义）。 */}
-        {isSave ? (
-          <OutlinedTextField
-            className="picker-filter-select"
-            label={t('picker.file_name')}
-            value={fileName}
-            onInput={handleFileNameChange}
-            onKeyDown={handleFileNameKeyDown}
-          />
-        ) : (
-          <OutlinedSelect
-            className="picker-filter-select"
-            value={activeFilterId ?? ''}
-            onInput={(e) => handleFilterChange((e.target as HTMLSelectElement).value)}
-          >
-            <SelectOption value="">
-              <div slot="headline">{t('picker.all_files')}</div>
-            </SelectOption>
-            {config?.filters?.map((f) => (
-              <SelectOption key={f.id} value={f.id}>
-                <div slot="headline">{filterLabel(f)}</div>
-              </SelectOption>
-            ))}
-          </OutlinedSelect>
-        )}
-        <Button variant="text" onClick={cancel}>{t('picker.cancel')}</Button>
-        <Button
-          variant="filled"
-          disabled={isSave ? fileName.trim().length === 0 : selected.size === 0}
-          onClick={confirm}
-        >
-          {isSave ? (config.acceptLabel || t('picker.confirm')) : t('picker.select')}
-        </Button>
-      </footer>
+      <PickerFooter
+        isSave={isSave}
+        selectedCount={selected.size}
+        fileName={fileName}
+        onFileNameChange={handleFileNameChange}
+        onFileNameKeyDown={handleFileNameKeyDown}
+        activeFilterId={activeFilterId}
+        onFilterChange={handleFilterChange}
+        filterLabel={filterLabel}
+        filters={config?.filters}
+        acceptLabel={config?.acceptLabel}
+        canConfirm={isSave ? fileName.trim().length > 0 : selected.size > 0}
+        onCancel={cancel}
+        onConfirm={confirm}
+      />
 
       {deviceMenu && (
         <ContextMenu

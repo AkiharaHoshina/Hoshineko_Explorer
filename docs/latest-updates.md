@@ -1,5 +1,37 @@
 # 更新日志
 
+## v3.0.1001 — 粘贴 / GPU / Ctrl 角标修复 + 性能与拆分第一批
+
+- **Ctrl+V 粘贴修复**：`Ctrl+C/X/V` 从「文件区分区守卫之后」移到之前——
+  复制后经侧边栏/标签页/返回上级导航（焦点不在文件区）再粘贴不再静默失效；
+  输入框/对话框守卫保留（地址栏文本粘贴不受影响）。
+- **外部剪贴板粘贴**：应用内剪贴板为空时读取系统剪贴板 `text/uri-list`
+  （Electron clipboard 优先，`wl-paste`/`xclip` 兜底），把 GTK/Qt 文件
+  管理器复制的本地文件复制进当前目录；首次粘贴后写入内部剪贴板，
+  右键菜单/其他窗口可继续粘贴。新 IPC `clipboard:read-external`。
+- **AMD GPU 无 rocm-smi 兜底**：`listGpuObjects` 在 AMD 工具缺失/无输出时
+  改用 `/sys/class/drm` 枚举（lspci 命名），读数走 `gpu_busy_percent` +
+  `hwmon/temp1_input` + `mem_info_vram_*`；本机 Strix APU（Radeon 880M/890M）
+  实测显示「利用率 6% · 显存 2.0/8.0 GB · 37°C」。各厂商分支独立容错，
+  单个工具失败不再清空整类。
+- **Ctrl 序号角标残留**：keyup 改捕获阶段（穿过终端/对话框的
+  stopPropagation），并补 `window blur` / `visibilitychange` 兜底复位。
+- **性能第一批**：
+  - Material Symbols 图标字体按实际使用图标子集化：5.23 MB → 185 KB
+    （`scripts/subset-icons.py`，`npm run icons:subset`；新增图标须重跑）。
+  - `TerminalPanel` / `ObjectPanel` / `FilePreviewPanel` 懒加载：主 chunk
+    2.16 MB → 1.76 MB，xterm 338 KB 只在首次打开终端时加载。
+  - 目录 MIME 批量探测：magic-byte 探测 32 路并发、`file` 批大小 200 → 1000；
+    20k 文件目录导航实测 2.4 s → 1.26 s。
+  - 对象面板实例页轮询加 `isActive` 守卫（隐藏标签页不再 1–2 s 轮询）。
+  - 新增 `DEFAULT_TERMINAL_HEIGHT` 独立模块（从懒加载组件导入常量会把
+    整个终端模块拉回首屏）。
+- **拆分第一批**（详见 `docs/代码拆分可行性报告.md`）：`FilePickerRoot`、
+  `PickerFooter` 抽出；后续按 P2–P6 分阶段拆 App / ExplorerTab / FilePicker。
+- **验证**：`npm run build` 通过；e2e 06/08/13/23/72/93/107 全绿；
+  临时用例覆盖「复制/剪切后经上级导航粘贴」「外部 text/uri-list 粘贴」
+  「Ctrl keyup/blur 角标复位」「本机真实 AMD GPU 枚举与读数」。
+
 ## v0.11.50-dev — review 29：设置精修（15 项）
 
 - 预览吸顶贴地址栏（滚动容器/顶栏上边距归 0）；图标大小滑条松手生效；

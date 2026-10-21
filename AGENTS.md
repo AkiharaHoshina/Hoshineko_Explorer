@@ -182,6 +182,17 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
 - **CSS**: flat `.css` files in same directory as component, imported in component file.
 - **Web Components**: Material 3 UI uses `@material/web` custom elements (e.g., `<md-filled-button>`, `<md-dialog>`). Import any new component in `src/material-web.ts`.
 
+## v3.0.1001 约定（粘贴 / GPU / 图标 / 性能 / 拆分）
+
+- **剪贴板快捷键必须在键盘分区守卫之前**：`Ctrl+C/X/V` 与 `Ctrl+A` 同属全局文件操作——从文件区复制后经侧边栏/标签页/返回上级导航（焦点落在非 files 分区）再按 `Ctrl+V`，若放在 zone guard 之后会静默失效（用户反馈的根因）。输入框/对话框守卫仍在其上（地址栏文本粘贴不受影响）。改动 ExplorerTab 键盘顺序时先看 e2e 08 + 临时 P1/P2 用例。
+- **外部剪贴板粘贴**： `clipboard:read-external`（window.ts）读系统剪贴板 `text/uri-list`——Electron `clipboard.read/readBuffer('text/uri-list')` 优先，`wl-paste`/`xclip` 兜底；只接受本地 `file://`（`localhost` 视为本地），`fs.stat` 失败的陈旧路径跳过。前端 `executePasteAction` 仅在内部剪贴板为空时调用，成功后 `clipboardSet` 回写内部剪贴板。纯文本/图片不当作文件粘贴。
+- **AMD GPU 工具无关兜底**：rocm-smi 在多数发行版默认不装（AMD APU 尤其常见）。`listGpuObjects` 的 AMD 分支在工具缺失/无输出时走 `listAmdGpuObjectsFromSysfs`（`/sys/class/drm/card*` vendor 0x1002 + lspci 命名），`readGpuReading` 的 amd 分支先读 sysfs（`gpu_busy_percent` / `hwmon/temp1_input` / `mem_info_vram_{used,total}`），全部字段缺失才回落 rocm-smi（e2e 106 的空 DRM 沙箱路径）。各厂商分支独立 try/catch——单个工具异常不得清空整类（旧实现最外层 catch 会连带隐藏 Intel）。
+- **Material Symbols 子集字体**：`src/index.css` 不再 import `@fontsource-variable/material-symbols-rounded/full.css`，改用 `src/assets/fonts/MaterialSymbolsRounded-subset.woff2`（185 KB）。生成脚本 `scripts/subset-icons.py` 解析 GSUB 连字（`pyftsubset` 直接 `--text` + 默认闭包会把全部图标拉回来，必须按命中的输出字形 `--glyphs-file` + `--no-layout-closure`）。**新增图标后必须 `npm run icons:subset` 并提交字体文件**，依赖 python fontTools + brotli。验证手法：canvas 以 `24px "Material Symbols Rounded Variable"` 量 `folder`/`arrow_upward` 宽度应为单个字形（≈24px），不是字母串宽度。
+- **懒加载边界**：`TerminalPanel` / `ObjectPanel` / `FilePreviewPanel` 已 `React.lazy`。从懒加载组件导入**常量/类型**会重新拉回主 chunk——非组件导出放独立小模块（如 `terminalConstants.ts`）。对象面板只在 objects:// 分支渲染、终端只在 `terminalOpen`、预览只在开关打开时挂载，懒加载才有效（勿改成无条件渲染）。
+- **目录 MIME 批量探测性能**：`detectMimeBatch` 的 magic-byte 探测按 `FAST_MIME_CONCURRENCY=32` 并发（旧实现逐个 await，20k 文件打开就要 1–2 s），`file --mime-type` 批大小 `BATCH_CHUNK_SIZE=1000`（旧 200 = 20k 文件 spawn 100 次）。`file` 本身很快（20k ≈ 80 ms），别再缩小批大小。
+- **对象实例页轮询必须 `isActive` 门控**：隐藏标签页常驻 DOM，旧 tick 在非活动标签页仍每 1–2 s 读一次对象。新增轮询/定时器一律检查 `isActive === false` 早退（切回时 effect 重挂立即补 tick）。
+- **拆分约定**：见 `docs/代码拆分可行性报告.md`。拆组件时保留原类名/DOM 结构（e2e 选择器与软件渲染坐标敏感），常量独立模块，回调 useCallback，单阶段提交并跑对应 e2e；不改变隐藏标签页常驻、无路由、SettingsContext 单一数据源三条模型。
+
 ## 注意事项
 
 一定要写jsdoc！写字段说明！！！写i18n！！

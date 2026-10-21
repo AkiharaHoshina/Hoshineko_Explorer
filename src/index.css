@@ -1,7 +1,19 @@
 @import './theme/fallback.css';
-@import '@fontsource-variable/material-symbols-rounded/full.css';
 @import '@fontsource/noto-sans-sc/chinese-simplified-400.css';
 @import '@fontsource/noto-sans-sc/chinese-simplified-700.css';
+
+/* Material Symbols 图标字体子集：完整字体 5.23 MB，应用实际只用约 200 个
+   图标。scripts/subset-icons.py 解析 GSUB 连字，只保留命中图标（约 185 KB）。
+   **新增图标后必须运行 `npm run icons:subset` 重新生成**，否则新图标显示为
+   字面文本。font-display: block 避免字体加载前把 "folder" 等连字名当文字
+   闪出来（本地文件加载极快，阻塞窗口可忽略）。 */
+@font-face {
+  font-family: 'Material Symbols Rounded Variable';
+  font-style: normal;
+  font-display: block;
+  font-weight: 100 700;
+  src: url('./assets/fonts/MaterialSymbolsRounded-subset.woff2') format('woff2-variations');
+}
 
 /* UI 显示字体：Google Sans（可变字体，wght 400–700）——中文/日文/韩文
    无 Google Sans 字形，自动回落 Noto Sans SC（与以往 Roboto 行为一致）。

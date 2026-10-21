@@ -3,10 +3,10 @@ import { Icon } from './Icon';
 import { IconButton } from './IconButton';
 import { TerminalPane } from './TerminalPane';
 import { t } from '../i18n';
+import { DEFAULT_TERMINAL_HEIGHT } from './terminalConstants';
 import './TerminalPanel.css';
 
-/** 终端面板默认高度（px），每次呼出时恢复为该值 */
-export const DEFAULT_TERMINAL_HEIGHT = 420;
+export { DEFAULT_TERMINAL_HEIGHT };
 
 /** 终端面板最小高度（px），拖拽下限 */
 const MIN_TERMINAL_HEIGHT = 120;

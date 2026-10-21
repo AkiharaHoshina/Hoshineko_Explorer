@@ -3188,24 +3188,65 @@ export function registerSystemHandlers(
   }
 
   /**
-   * 枚举 GPU 类对象（多厂商合并）：NVIDIA/AMD 由 vendor 工具驱动（营销名
-   * 准确、读数可用），Intel 核显由 sysfs 卡片枚举（工具无关）。解析失败/
-   * 工具挂起（execFile timeout 杀进程）回空数组，不崩；空类由根页隐藏
-   * 天然兜底。
+   * AMD GPU 枚举（sysfs 兜底，工具无关）：rocm-smi 在绝大多数发行版默认
+   * 不安装（尤其是 AMD APU/核显），只靠它会导致 GPU 类为空、入口被
+   * 隐藏。与 Intel 同源：/sys/class/drm/card* 的 vendor == 0x1002 +
+   * lspci 命名；读数用 amdgpu 暴露的 gpu_busy_percent / hwmon。
+   */
+  async function listAmdGpuObjectsFromSysfs(): Promise<ObjectInstance[]> {
+    const cards = await listDrmCards();
+    const instances: ObjectInstance[] = [];
+    for (const card of cards.filter((c) => c.vendorName === 'amd')) {
+      const name = (card.slot ? await lspciDeviceName(card.slot) : null) ?? `AMD GPU ${card.index}`;
+      const node = path.join('/dev/dri', `card${card.index}`);
+      let nativePath: string | undefined;
+      try {
+        await fs.access(node);
+        nativePath = node;
+      } catch { /* 节点缺失：无原生拖出路径 */ }
+      instances.push({
+        id: `amd-${card.index}`,
+        name,
+        subtitle: 'AMD',
+        kind: 'gpu',
+        icon: 'developer_board',
+        ...(nativePath ? { nativePath, nativeIsDir: false } : {}),
+      });
+    }
+    return instances;
+  }
+
+  /**
+   * 枚举 GPU 类对象（多厂商合并）：NVIDIA/AMD 优先 vendor 工具（营销名
+   * 准确、读数可用），工具缺失/无输出时回落 sysfs 卡片；Intel 恒走
+   * sysfs。各分支独立 try/catch——单个工具失败不得清空整类（旧实现
+   * 最外层 catch 会让 rocm-smi 异常连带隐藏 Intel 核显）。
    */
   async function listGpuObjects(): Promise<ObjectInstance[]> {
-    try {
-      const instances: ObjectInstance[] = [];
-      const det = await detectGpuTool();
-      if (det) {
-        if (det.vendor === 'nvidia') instances.push(...await listNvidiaGpuObjects(det.tool));
-        if (det.vendor === 'amd') instances.push(...await listAmdGpuObjects(det.tool));
-      }
-      instances.push(...await listIntelGpuObjects());
-      return instances;
-    } catch {
-      return [];
+    const instances: ObjectInstance[] = [];
+    const det = await detectGpuTool().catch(() => null);
+    if (det?.vendor === 'nvidia') {
+      try {
+        instances.push(...await listNvidiaGpuObjects(det.tool));
+      } catch { /* nvidia-smi 异常：GPU 类仍由其他厂商支撑 */ }
     }
+    if (det?.vendor === 'amd') {
+      try {
+        const toolInstances = await listAmdGpuObjects(det.tool);
+        if (toolInstances.length > 0) instances.push(...toolInstances);
+        else instances.push(...await listAmdGpuObjectsFromSysfs());
+      } catch {
+        instances.push(...await listAmdGpuObjectsFromSysfs());
+      }
+    } else {
+      // 工具链首个命中者胜出（nvidia-smi 存在时 det.vendor 为 nvidia）：
+      // 混装 AMD + NVIDIA 时 AMD 仍需 sysfs 兜底
+      instances.push(...await listAmdGpuObjectsFromSysfs());
+    }
+    try {
+      instances.push(...await listIntelGpuObjects());
+    } catch { /* Intel 枚举异常不影响其他厂商 */ }
+    return instances;
   }
 
   /**
@@ -3378,6 +3419,48 @@ export function registerSystemHandlers(
     return null;
   }
 
+  /**
+   * AMD 读数（sysfs，工具无关）：gpu_busy_percent + hwmon temp1_input +
+   * mem_info_vram_{used,total}。字段缺失回 null 而非整体失败；全部字段
+   * 都缺失时回 null，让上层回落 rocm-smi（e2e 空 DRM 沙箱即走此分支）。
+   */
+  async function readAmdGpuReadingFromSysfs(idx: number): Promise<ObjectReading | null> {
+    const cards = await listDrmCards();
+    const card = cards.find((c) => c.vendorName === 'amd' && c.index === idx);
+    if (!card) return null;
+    let utilizationPct: number | null = null;
+    try {
+      const v = Number((await fs.readFile(path.join(card.deviceDir, 'gpu_busy_percent'), 'utf-8')).trim());
+      if (Number.isFinite(v)) utilizationPct = v;
+    } catch { /* 无 busy 节点 */ }
+    let memUsedBytes: number | null = null;
+    let memTotalBytes: number | null = null;
+    try {
+      const used = Number((await fs.readFile(path.join(card.deviceDir, 'mem_info_vram_used'), 'utf-8')).trim());
+      if (Number.isFinite(used)) memUsedBytes = used;
+    } catch { /* APU 可能不暴露 VRAM 节点 */ }
+    try {
+      const total = Number((await fs.readFile(path.join(card.deviceDir, 'mem_info_vram_total'), 'utf-8')).trim());
+      if (Number.isFinite(total)) memTotalBytes = total;
+    } catch { /* 同上 */ }
+    let tempC: number | null = null;
+    try {
+      const hwmons = (await fs.readdir(path.join(card.deviceDir, 'hwmon'))).filter((d) => d.startsWith('hwmon'));
+      for (const h of hwmons) {
+        try {
+          const mC = Number((await fs.readFile(path.join(card.deviceDir, 'hwmon', h, 'temp1_input'), 'utf-8')).trim());
+          if (Number.isFinite(mC)) {
+            tempC = Math.round(mC / 1000);
+            break;
+          }
+        } catch { /* 下一个 hwmon */ }
+      }
+    } catch { /* 无 hwmon：回落全局扫描 */ }
+    if (tempC === null) tempC = await readHwmonChipTemp(['amdgpu']);
+    if (utilizationPct === null && memUsedBytes === null && memTotalBytes === null && tempC === null) return null;
+    return { kind: 'gpu', vendor: 'amd', utilizationPct, memUsedBytes, memTotalBytes, tempC };
+  }
+
   /** 读取 GPU 实例读数（利用率/显存/温度）。三厂商工具输出形态差异大，
    *  尽力而为解析，字段失败回 null（「—」）。 */
   async function readGpuReading(instanceId: string): Promise<ObjectReading | null> {
@@ -3395,6 +3478,12 @@ export function registerSystemHandlers(
       // Intel 工具无关（sysfs + intel_gpu_top 回落）——核显在无 vendor
       // 工具的环境也必须可读（字段回落 null 而非整体失败）
       if (vendor === 'intel') return await readIntelGpuReading(idx);
+      // AMD 优先 sysfs：rocm-smi 默认不装（APU 尤其常见），有读数就
+      // 不必依赖工具；无任何 sysfs 字段时回落 rocm-smi（e2e 106 路径）
+      if (vendor === 'amd') {
+        const sysfsReading = await readAmdGpuReadingFromSysfs(idx);
+        if (sysfsReading) return sysfsReading;
+      }
       const det = await detectGpuTool();
       if (!det || det.vendor !== vendor) return null;
       if (vendor === 'nvidia') {

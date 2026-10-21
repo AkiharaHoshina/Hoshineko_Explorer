@@ -1,6 +1,8 @@
-import { ipcMain, BrowserWindow, dialog, nativeImage, app, webContents } from 'electron';
+import { ipcMain, BrowserWindow, dialog, nativeImage, app, webContents, clipboard } from 'electron';
 import path from 'path';
 import { promises as fs, writeFileSync, existsSync, readFileSync } from 'fs';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { getCachedDragIconPath } from '../fsUtils';
 import { detectWindowManager } from './system';
 
@@ -188,6 +190,87 @@ ipcMain.handle('clipboard:clear', () => {
     if (existsSync(p)) fs.unlink(p).catch(() => { /* ignore */ });
   } catch { /* ignore */ }
   broadcastClipboard();
+});
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * 解析系统剪贴板的 `text/uri-list`：只接受本地 `file://` URL。
+ * 跳过注释行（`#`）与重复项；远端主机（file://host/...）不支持。
+ */
+function parseClipboardUriList(raw: string): string[] {
+  if (!raw) return [];
+  const paths: string[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const text = line.trim();
+    if (!text || text.startsWith('#')) continue;
+    let url: URL;
+    try {
+      url = new URL(text);
+    } catch { continue; }
+    if (url.protocol !== 'file:') continue;
+    if (url.host && url.host !== 'localhost') continue;
+    let filePath: string;
+    try {
+      filePath = decodeURIComponent(url.pathname);
+    } catch { continue; }
+    if (!filePath.startsWith('/') || paths.includes(filePath)) continue;
+    paths.push(filePath);
+  }
+  return paths;
+}
+
+/**
+ * 读取系统剪贴板里的文件 URI 列表。优先 Electron clipboard（Wayland/X11
+ * 由 Chromium 直接对接），读不到自定义 MIME 时用 wl-paste/xclip 兜底。
+ */
+async function readSystemUriList(): Promise<string> {
+  for (const format of ['text/uri-list', 'text/plain']) {
+    try {
+      const text = clipboard.read(format);
+      if (text && text.includes('file://')) return text;
+    } catch { /* 格式不支持 */ }
+    try {
+      const text = clipboard.readBuffer(format).toString('utf-8');
+      if (text && text.includes('file://')) return text;
+    } catch { /* 格式不支持 */ }
+  }
+  const commands: Array<[string, string[]]> = [
+    ['wl-paste', ['--no-newline', '--type', 'text/uri-list']],
+    ['xclip', ['-selection', 'clipboard', '-t', 'text/uri-list', '-o']],
+  ];
+  for (const [cmd, args] of commands) {
+    try {
+      const { stdout } = await execFileAsync(cmd, args, { timeout: 1500, maxBuffer: 1024 * 1024 });
+      if (stdout && stdout.includes('file://')) return stdout;
+    } catch { /* 工具缺失/超时/剪贴板无此格式 */ }
+  }
+  return '';
+}
+
+/**
+ * 读取外部应用（GTK/Qt 文件管理器）复制到系统剪贴板的本地文件。
+ * 返回与内部剪贴板同构的 {@link ClipboardData}（operation 恒 copy）；
+ * 无文件（纯文本/图片/空）返回 null。陈旧路径（已删除）直接跳过。
+ */
+ipcMain.handle('clipboard:read-external', async (): Promise<ClipboardData | null> => {
+  const uris = parseClipboardUriList(await readSystemUriList());
+  if (uris.length === 0) return null;
+  const files: ClipboardData['files'] = [];
+  for (const p of uris) {
+    try {
+      const st = await fs.stat(p);
+      files.push({
+        name: path.basename(p),
+        path: p,
+        isDirectory: st.isDirectory(),
+        size: st.isDirectory() ? 0 : st.size,
+        mtime: st.mtime,
+        mime: null,
+      });
+    } catch { /* 剪贴板中的陈旧路径 */ }
+  }
+  return files.length > 0 ? { files, operation: 'copy' } : null;
 });
 
 /**

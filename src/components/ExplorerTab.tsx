@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { showToast, showProgressToast, updateProgress, finishToast, dismissToast, shortPath } from '../utils/toast';
 import { useClipboard } from '../contexts/ClipboardContext';
 import { StatusBar } from './StatusBar';
@@ -33,7 +33,6 @@ import { Dashboard, type PinnedItem } from './Dashboard';
 import { SortControls, OMNIBAR_MIN_WIDTH_EXPANDED } from './SortControls';
 import { useTopBarWrap } from '../hooks/useTopBarWrap';
 import { useAutoSortCollapse } from '../hooks/useAutoSortCollapse';
-import { FilePreviewPanel } from './FilePreviewPanel';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useDrag } from '../contexts/DragContext';
 import { t } from '../i18n';
@@ -88,8 +87,17 @@ import { parseSearchLimitStr } from '../utils/searchLimit';
 import { SettingsPage } from './settings/SettingsPage';
 import { SearchFilterBar } from './SearchFilterBar';
 import { SearchPendingOverlay } from './SearchPendingOverlay';
-import { ObjectPanel, type ObjectSearchViewInfo } from './ObjectPanel';
+import type { ObjectSearchViewInfo } from './ObjectPanel';
 import { ObjectSearchFilterBar } from './ObjectSearchFilterBar';
+
+/**
+ * 重型视图按需加载（Vite 动态 chunk）：对象面板（3k+ 行 + Sparkline）与
+ * 文件预览面板只在对应视图/开关打开时才进入初始 bundle 与运行时。二者
+ * 原本 eager import，使每次启动都解析对象面板全部代码；懒加载后首屏只
+ * 保留文件浏览必需模块。首次打开对象页/预览会有一次极短的 chunk 加载。
+ */
+const ObjectPanel = lazy(() => import('./ObjectPanel').then((m) => ({ default: m.ObjectPanel })));
+const FilePreviewPanel = lazy(() => import('./FilePreviewPanel').then((m) => ({ default: m.FilePreviewPanel })));
 
 /** 搜索选项（后端 system:search 参数；limit/timeout 为临时值，不入
  *  search:// 虚拟路径——新关键词搜索时随 options 整体重置回默认） */
@@ -2040,7 +2048,20 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
   const executePasteAction = useCallback(async () => {
     // Object Panel / 设置页等虚拟页无粘贴语义（与仪表盘/回收站同源守卫）
     if (isObjectsPath(currentPath) || isObjectSearchPath(currentPath) || isSettingsPath(currentPath) || isSettingsSearchPath(currentPath)) return;
-    if (clipboard && clipboard.files.length > 0) {
+    let source = clipboard;
+    if (!source || source.files.length === 0) {
+      // 应用内剪贴板为空 → 读取系统剪贴板（GTK/Qt 文件管理器复制的
+      // text/uri-list）。仅取本地文件；无文件时静默（文本粘贴无语义）。
+      try {
+        const external = await window.electron?.clipboardReadExternal?.();
+        if (external && external.files.length > 0) {
+          source = external;
+          // 记住外部内容：首次 Ctrl+V 后右键菜单与其他窗口也能继续粘贴
+          void window.electron?.clipboardSet({ files: external.files, operation: 'copy' });
+        }
+      } catch { /* 平台不支持外部剪贴板读取：按无内容处理 */ }
+    }
+    if (source && source.files.length > 0) {
       // 搜索态粘贴目标 = 发起搜索的目录（与背景落点同语义——
       // search:// 虚拟路径不是真实目录）
       const target = isSearchPath(currentPath)
@@ -2048,11 +2069,11 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
         : currentPath;
       const existingNames = files.map((f) => f.name);
       await pasteFiles(
-        clipboard.files,
-        clipboard.operation,
+        source.files,
+        source.operation,
         target,
         existingNames,
-        clipboard.operation === 'cut' ? clearClipboard : undefined,
+        source.operation === 'cut' ? clearClipboard : undefined,
         () => loadPath(currentPath),
         (conflicts) => onConflictDialog(conflicts, target, existingNames),
       );
@@ -2087,6 +2108,35 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
         }
         // review 24：全选 = 换选——白框消失（焦点回容器）
         fileZoneRef.current?.focus();
+        return;
+      }
+
+      // 剪贴板快捷键（Ctrl+C/X/V）与 Ctrl+A 同属**全局文件操作**：必须
+      // 位于键盘分区守卫之前——从文件区复制后经侧边栏/标签页/面包屑
+      // 导航（焦点停留在这些分区）再按 Ctrl+V 时，分区守卫会让粘贴
+      // 静默失效（用户反馈「复制后 Ctrl+V 不能粘贴」的根因）。输入框/
+      // 对话框守卫仍在上方，地址栏文本粘贴不受影响。
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        if (selectedFiles.size > 0) {
+          const filesToCopy = sortedFiles.filter(f => selectedFiles.has(f.path));
+          copy(filesToCopy);
+          copyToClipboard(selectedFiles.size);
+        }
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
+        if (selectedFiles.size > 0) {
+          const filesToCut = sortedFiles.filter(f => selectedFiles.has(f.path));
+          cut(filesToCut);
+          cutToClipboard(selectedFiles.size);
+        }
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        e.preventDefault();
+        void executePasteAction();
         return;
       }
 
@@ -2282,29 +2332,6 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-        if (selectedFiles.size > 0) {
-          const filesToCopy = sortedFiles.filter(f => selectedFiles.has(f.path));
-          copy(filesToCopy);
-          copyToClipboard(selectedFiles.size);
-        }
-        return;
-      }
-
-      if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
-        if (selectedFiles.size > 0) {
-          const filesToCut = sortedFiles.filter(f => selectedFiles.has(f.path));
-          cut(filesToCut);
-          cutToClipboard(selectedFiles.size);
-        }
-        return;
-      }
-
-      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-        e.preventDefault();
-        executePasteAction();
-        return;
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -2905,36 +2932,38 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
               </>
             );
           })()}
-          <ObjectPanel
-            path={isObjectSearchPath(currentPath) ? objectSearchBasePath(parseObjectSearchPath(currentPath)!) : currentPath}
-            inSearchState={isObjectSearchPath(currentPath)}
-            excludedClasses={parseObjectSearchPath(currentPath)?.excludedClasses ?? []}
-            excludedKinds={parseObjectSearchPath(currentPath)?.excludedKinds ?? []}
-            filterMode={parseObjectSearchPath(currentPath)?.filterMode ?? null}
-            pidConds={parseObjectSearchPath(currentPath)?.pidConds ?? []}
-            onSearchViewInfoChange={setObjectSearchInfo}
-            marqueeEnabled={marqueeEnabled}
-            isActive={isActive}
-            sparklineWindowSeconds={sparklineWindowSeconds}
-            onNavigate={(p: string) => loadPath(p, true)}
-            onOpenLocation={(p: string) => loadPath(p, true)}
-            onLocateObject={onRevealFile}
-            onMountDevice={onMountDevice}
-            onUnmountDevice={onUnmountDevice}
-            onEjectDevice={onEjectDevice}
-            onTerminateProcess={onTerminateProcess}
-            onNiceProcess={onNiceProcess}
-            onUnlockPrivileged={onUnlockPrivileged}
-            onPinObject={onPinObject}
-            onBatchTerminate={onBatchTerminate}
-            onBatchNice={onBatchNice}
-            objectClassOrder={objectClassOrder}
-            onObjectClassOrderChange={onObjectClassOrderChange}
-            alertTempC={alertTempC}
-            alertDiskPct={alertDiskPct}
-            onNetworkToggle={onNetworkToggle}
-            searchQuery={objectSearchQuery}
-          />
+          <Suspense fallback={null}>
+            <ObjectPanel
+              path={isObjectSearchPath(currentPath) ? objectSearchBasePath(parseObjectSearchPath(currentPath)!) : currentPath}
+              inSearchState={isObjectSearchPath(currentPath)}
+              excludedClasses={parseObjectSearchPath(currentPath)?.excludedClasses ?? []}
+              excludedKinds={parseObjectSearchPath(currentPath)?.excludedKinds ?? []}
+              filterMode={parseObjectSearchPath(currentPath)?.filterMode ?? null}
+              pidConds={parseObjectSearchPath(currentPath)?.pidConds ?? []}
+              onSearchViewInfoChange={setObjectSearchInfo}
+              marqueeEnabled={marqueeEnabled}
+              isActive={isActive}
+              sparklineWindowSeconds={sparklineWindowSeconds}
+              onNavigate={(p: string) => loadPath(p, true)}
+              onOpenLocation={(p: string) => loadPath(p, true)}
+              onLocateObject={onRevealFile}
+              onMountDevice={onMountDevice}
+              onUnmountDevice={onUnmountDevice}
+              onEjectDevice={onEjectDevice}
+              onTerminateProcess={onTerminateProcess}
+              onNiceProcess={onNiceProcess}
+              onUnlockPrivileged={onUnlockPrivileged}
+              onPinObject={onPinObject}
+              onBatchTerminate={onBatchTerminate}
+              onBatchNice={onBatchNice}
+              objectClassOrder={objectClassOrder}
+              onObjectClassOrderChange={onObjectClassOrderChange}
+              alertTempC={alertTempC}
+              alertDiskPct={alertDiskPct}
+              onNetworkToggle={onNetworkToggle}
+              searchQuery={objectSearchQuery}
+            />
+          </Suspense>
         </div>
       ) : (isSettingsPath(currentPath) || isSettingsSearchPath(currentPath)) ? (
         // 设置页/设置搜索（review 26 / 设置搜索）：独占内容区（与仪表盘/
@@ -3368,16 +3397,18 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
                     title={t('preview.drag_hint')}
                     onPointerDown={handlePreviewDividerPointerDown}
                   />
-                  <FilePreviewPanel
-                    file={previewState.kind === 'file' ? previewState.file : undefined}
-                    multiple={previewState.kind === 'multiple'}
-                    dirPath={previewState.kind === 'directory' ? previewState.path : undefined}
-                    dirTrashOriginalPath={
-                      previewState.kind === 'directory' ? previewState.trashOriginalPath : undefined
-                    }
-                    width={previewWidth}
-                    onMarkdownLink={handleMarkdownLink}
-                  />
+                  <Suspense fallback={null}>
+                    <FilePreviewPanel
+                      file={previewState.kind === 'file' ? previewState.file : undefined}
+                      multiple={previewState.kind === 'multiple'}
+                      dirPath={previewState.kind === 'directory' ? previewState.path : undefined}
+                      dirTrashOriginalPath={
+                        previewState.kind === 'directory' ? previewState.trashOriginalPath : undefined
+                      }
+                      width={previewWidth}
+                      onMarkdownLink={handleMarkdownLink}
+                    />
+                  </Suspense>
                 </>
               )}
             </div>

@@ -370,8 +370,20 @@ export function clearMimeCache(): void {
 
 // ── Batch MIME detection ──────────────────────────────────────────
 
-/** Maximum paths per `file --mime-type` invocation to stay within command-line limits. */
-const BATCH_CHUNK_SIZE = 200;
+/**
+ * Maximum paths per `file --mime-type` invocation to stay within command-line
+ * limits. `file` itself is very fast (20k files ≈ 80 ms)，真正的开销是
+ * 进程启动次数——200 路径/次意味着 20k 文件要 spawn 100 次；1000 路径/次
+ * （约 50–200 KB argv，远低于 ARG_MAX）把启动开销压到 20 次。
+ */
+const BATCH_CHUNK_SIZE = 1000;
+
+/**
+ * 快速 MIME 探测（magic bytes 会打开每个文件）的并发度。旧实现逐个
+ * `await`，2 万文件的大目录光打开文件就要 1–2 秒；32 路并发既避免
+ * 阻塞事件循环太久，也把总耗时压到百毫秒级。
+ */
+const FAST_MIME_CONCURRENCY = 32;
 
 /**
  * Run `file --mime-type --brief` for multiple paths in one subprocess
@@ -450,6 +462,8 @@ export async function detectMimeBatch(filePaths: string[]): Promise<Map<string, 
   const pending: string[] = [];
   const now = Date.now();
 
+  /** 需要通过 magic bytes 探测的路径（缓存命中直接落结果） */
+  const toProbe: string[] = [];
   for (const filePath of filePaths) {
     // Check cache
     const cached = mimeCache.get(filePath);
@@ -460,19 +474,29 @@ export async function detectMimeBatch(filePaths: string[]): Promise<Map<string, 
     if (cached) {
       mimeCache.delete(filePath);
     }
+    toProbe.push(filePath);
+  }
 
-    const ext = path.extname(filePath).toLowerCase();
-    const mime = await detectMimeFast(filePath, ext);
-
-    if (mime) {
-      // Container types still need `file` for sub-type
-      if (CONTAINER_TYPES.has(mime)) {
-        pending.push(filePath);
+  // 并发探测：每个 chunk 内并行，chunk 间串行（限制同时打开的文件数）
+  for (let i = 0; i < toProbe.length; i += FAST_MIME_CONCURRENCY) {
+    const chunk = toProbe.slice(i, i + FAST_MIME_CONCURRENCY);
+    const probed = await Promise.all(
+      chunk.map(async (filePath) => {
+        const ext = path.extname(filePath).toLowerCase();
+        return { filePath, mime: await detectMimeFast(filePath, ext) };
+      }),
+    );
+    for (const { filePath, mime } of probed) {
+      if (mime) {
+        // Container types still need `file` for sub-type
+        if (CONTAINER_TYPES.has(mime)) {
+          pending.push(filePath);
+        } else {
+          result.set(filePath, mime);
+        }
       } else {
-        result.set(filePath, mime);
+        pending.push(filePath);
       }
-    } else {
-      pending.push(filePath);
     }
   }
 

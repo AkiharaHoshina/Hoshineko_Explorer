@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import { showToast } from "./utils/toast";
 import { t, setLocale, getLocale, type Locale } from "./i18n";
 import { initDragIcons } from "./utils/dragIconRenderer";
@@ -19,7 +19,15 @@ import { SettingsContext } from "./contexts/SettingsContext";
 import { ContextMenu } from "./components/ContextMenu";
 import type { ContextMenuItem } from "./components/ContextMenu";
 import { HoshinekoNyaDialog } from "./components/HoshinekoNyaDialog";
-import { TerminalPanel, DEFAULT_TERMINAL_HEIGHT } from "./components/TerminalPanel";
+import { DEFAULT_TERMINAL_HEIGHT } from "./components/terminalConstants";
+
+/**
+ * 内建终端懒加载：xterm + node-pty 前端桥只在用户首次打开终端时加载，
+ * 不进入首屏 chunk（终端默认关闭，绝大多数启动用不到）。
+ */
+const TerminalPanel = lazy(() =>
+  import("./components/TerminalPanel").then((m) => ({ default: m.TerminalPanel })),
+);
 import { TitleBar } from "./components/TitleBar";
 import type { IFile, GvfsVolume } from "./types/files";
 import type { BackendConflictInfo, PortalRuntimeInfo } from "./types/electron";
@@ -1898,11 +1906,25 @@ function AppContent() {
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Control') setShowPinBadges(false);
     };
+    /**
+     * 兜底复位：Ctrl 的 keyup 可能被 stopPropagation 吞掉（终端/对话框
+     * 等子树），或按住 Ctrl 时窗口失焦（Alt+Tab/切换工作区）根本收不到
+     * keyup——角标会永久残留。keyup 走捕获阶段穿过 stopPropagation，
+     * 失焦/页面隐藏时无条件收起。
+     */
+    const resetBadges = () => setShowPinBadges(false);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') resetBadges();
+    };
     window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('blur', resetBadges);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('keyup', onKeyUp, true);
+      window.removeEventListener('blur', resetBadges);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [pinnedDirs, handleSidebarNavigate]);
 
@@ -2914,30 +2936,32 @@ function AppContent() {
             </div>
 
             {terminalOpen && (
-              <TerminalPanel
-                cwd={
-                  terminalCwd ||
+              <Suspense fallback={null}>
+                <TerminalPanel
+                  cwd={
+                    terminalCwd ||
                 (isVirtualTerminalDir
                   ? undefined
                   : tabs.find((t) => t.id === activeTabId)?.path) ||
                 undefined
-                }
-                currentDir={tabs.find((t) => t.id === activeTabId)?.path || undefined}
-                cdRequest={terminalCdRequest}
-                focusRequest={terminalFocusRequest}
-                onFocusChange={setTerminalFocused}
-                onFocusEscape={escapeTerminalFocus}
-                height={terminalHeight}
-                onHeightChange={setTerminalHeight}
-                onResetHeight={() => setTerminalHeight(DEFAULT_TERMINAL_HEIGHT)}
-                onClose={() => {
-                  setTerminalOpen(false);
-                  // 卸载不派发 blur，焦点状态须显式复位
-                  setTerminalFocused(false);
-                  // 关闭时清空显式启动目录，下次呼出以当前标签页目录启动
-                  setTerminalCwd(undefined);
-                }}
-              />
+                  }
+                  currentDir={tabs.find((t) => t.id === activeTabId)?.path || undefined}
+                  cdRequest={terminalCdRequest}
+                  focusRequest={terminalFocusRequest}
+                  onFocusChange={setTerminalFocused}
+                  onFocusEscape={escapeTerminalFocus}
+                  height={terminalHeight}
+                  onHeightChange={setTerminalHeight}
+                  onResetHeight={() => setTerminalHeight(DEFAULT_TERMINAL_HEIGHT)}
+                  onClose={() => {
+                    setTerminalOpen(false);
+                    // 卸载不派发 blur，焦点状态须显式复位
+                    setTerminalFocused(false);
+                    // 关闭时清空显式启动目录，下次呼出以当前标签页目录启动
+                    setTerminalCwd(undefined);
+                  }}
+                />
+              </Suspense>
             )}
 
             {contextMenu && (
