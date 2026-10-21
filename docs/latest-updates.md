@@ -1,5 +1,15 @@
 # 更新日志
 
+## v3.0.1002
+
+- 版本号升至 `3.0.1002`。
+- 包含本分支已落地的修复：Ctrl+C/X/V 全局粘贴、外部文件/图片剪贴板、
+  AMD GPU sysfs 兜底、Ctrl 角标复位、图标字体子集化、重型组件懒加载、
+  20k 目录 MIME 探测提速、`usocket` postinstall 清理、npm 12
+  `allowScripts` 适配、设置页懒加载 CSS 修复（详见下方 v3.0.1001 条目）。
+- AppImage 产物名随版本变为 `HoshinekoFM-3.0.1002.AppImage` /
+  `HoshinekoFM-3.0.1002-size.AppImage`（需重新构建）。
+
 ## v3.0.1001 — 粘贴 / GPU / Ctrl 角标修复 + 性能与拆分第一批
 
 - **npm 12 安装策略适配**：`package.json` 增加 `allowScripts`

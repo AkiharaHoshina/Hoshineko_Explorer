@@ -185,7 +185,7 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
 - **CSS**: flat `.css` files in same directory as component, imported in component file.
 - **Web Components**: Material 3 UI uses `@material/web` custom elements (e.g., `<md-filled-button>`, `<md-dialog>`). Import any new component in `src/material-web.ts`.
 
-## v3.0.1001 约定（粘贴 / GPU / 图标 / 性能 / 拆分）
+## v3.0.1002 约定（粘贴 / GPU / 图标 / 性能 / 拆分 / npm 策略）
 
 - **剪贴板快捷键必须在键盘分区守卫之前**：`Ctrl+C/X/V` 与 `Ctrl+A` 同属全局文件操作——从文件区复制后经侧边栏/标签页/返回上级导航（焦点落在非 files 分区）再按 `Ctrl+V`，若放在 zone guard 之后会静默失效（用户反馈的根因）。输入框/对话框守卫仍在其上（地址栏文本粘贴不受影响）。改动 ExplorerTab 键盘顺序时先看 e2e 08 + 临时 P1/P2 用例。
 - **外部剪贴板粘贴**： `clipboard:read-external`（window.ts）读系统剪贴板 `text/uri-list`——Electron `clipboard.read/readBuffer('text/uri-list')` 优先，`wl-paste`/`xclip` 兜底；只接受本地 `file://`（`localhost` 视为本地），`fs.stat` 失败的陈旧路径跳过。**没有文件 URI 时回退剪贴板图片**：`clipboard.readImage()` 非空则落地为 `app.getPath('temp')/hoshineko-clipboard/clipboard-<ISO>.png`（顺手清理 24h 前旧图），按普通文件粘贴——浏览器「复制图片」/截图可直接粘贴成 PNG 文件。前端 `executePasteAction` 仅在内部剪贴板为空时调用，成功后 `clipboardSet` 回写内部剪贴板。纯文本仍不当作文件粘贴。
