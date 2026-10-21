@@ -2,6 +2,13 @@
 
 ## v3.0.1001 — 粘贴 / GPU / Ctrl 角标修复 + 性能与拆分第一批
 
+- **修复主进程 `util.isError is not a function` 崩溃**：`npm install` 会把
+  `usocket`（dbus-next 的 optional dependency）装回来；它是 2016 年的包，
+  在 Node 24（Electron 43）下 D-Bus 握手即抛异常，表现为主进程 JS 错误
+  弹窗、D-Bus 接线中断、快捷键失效。新增
+  `scripts/remove-usocket.cjs` 并挂到 `postinstall`，安装后自动删除顶层与
+  嵌套 `usocket`；dbus-next 回退 `net.Socket`。已重建两个 AppImage，
+  `app.asar` 内不再包含 `usocket`。
 - **Ctrl+V 粘贴修复**：`Ctrl+C/X/V` 从「文件区分区守卫之后」移到之前——
   复制后经侧边栏/标签页/返回上级导航（焦点不在文件区）再粘贴不再静默失效；
   输入框/对话框守卫保留（地址栏文本粘贴不受影响）。
