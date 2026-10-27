@@ -395,6 +395,10 @@ const jaJP = {
   'sidebar.already_pinned': 'このフォルダーは既にピン留めされています',
   'sidebar.pin_via_file_manager': 'ファイルマネージャーで選択',
   'sidebar.pin_single_folder': 'フォルダーを1つドラッグしてピン留め',
+  'sidebar.collapse': 'サイドバーを折りたたむ',
+  'sidebar.expand': 'サイドバーを展開',
+  'sidebar.page': 'ページ',
+  'sidebar.pages': 'サイドバーのページ',
 
   // ── 导航栏 ──
   'nav.dashboard': 'ダッシュボード',

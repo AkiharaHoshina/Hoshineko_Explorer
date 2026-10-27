@@ -437,6 +437,10 @@ const ruUA = {
   'sidebar.already_pinned': 'Папка уже закреплена',
   'sidebar.pin_via_file_manager': 'Выбрать через файловый менеджер',
   'sidebar.pin_single_folder': 'Перетащите одну папку для закрепления',
+  'sidebar.collapse': 'Свернуть боковую панель',
+  'sidebar.expand': 'Развернуть боковую панель',
+  'sidebar.page': 'Страница',
+  'sidebar.pages': 'Страницы боковой панели',
 
   // ── 导航栏 ──
   'nav.dashboard': 'Панель',

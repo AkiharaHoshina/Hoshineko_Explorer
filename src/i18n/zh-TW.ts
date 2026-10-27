@@ -395,6 +395,10 @@ const zhTW = {
   'sidebar.already_pinned': '該資料夾已固定',
   'sidebar.pin_via_file_manager': '使用檔案管理員選擇',
   'sidebar.pin_single_folder': '請拖動單個資料夾進行釘選',
+  'sidebar.collapse': '收合側邊欄',
+  'sidebar.expand': '展開側邊欄',
+  'sidebar.page': '頁',
+  'sidebar.pages': '側邊欄頁面',
 
   // ── 導覽列 ──
   'nav.dashboard': '儀表板',

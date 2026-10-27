@@ -395,6 +395,10 @@ const zhCN = {
   'sidebar.already_pinned': '该文件夹已固定',
   'sidebar.pin_via_file_manager': '使用文件管理器选择',
   'sidebar.pin_single_folder': '请拖动单个文件夹进行固定',
+  'sidebar.collapse': '收起侧边栏',
+  'sidebar.expand': '展开侧边栏',
+  'sidebar.page': '页',
+  'sidebar.pages': '侧边栏页面',
 
   // ── 导航栏 ──
   'nav.dashboard': '仪表盘',

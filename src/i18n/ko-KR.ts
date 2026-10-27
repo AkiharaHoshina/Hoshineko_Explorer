@@ -396,6 +396,10 @@ const koKR = {
   'sidebar.already_pinned': '이미 고정된 폴더입니다',
   'sidebar.pin_via_file_manager': '파일 관리자로 선택',
   'sidebar.pin_single_folder': '폴더 하나를 끌어서 고정하세요',
+  'sidebar.collapse': '사이드바 접기',
+  'sidebar.expand': '사이드바 펼치기',
+  'sidebar.page': '페이지',
+  'sidebar.pages': '사이드바 페이지',
 
   // ── 내비게이션 바 ──
   'nav.dashboard': '대시보드',

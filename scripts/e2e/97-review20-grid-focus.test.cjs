@@ -35,7 +35,7 @@ const { ipcMain } = require('electron');
     })()`);
 
   /** 逐 Tab 轮询直到焦点分区为 want */
-  const tabToZone = async (win, want, max = 12) => {
+  const tabToZone = async (win, want, max = 20) => {
     for (let i = 0; i < max; i++) {
       await h.key(win, 'Tab');
       await h.sleep(250);

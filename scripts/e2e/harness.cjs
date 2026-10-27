@@ -707,6 +707,9 @@ async function waitFor(win, expr, { timeout = 10000, interval = 100 } = {}) {
 
 /** 计算窗口内元素中心点（CSS 像素，含 zoom 换算后的输入坐标由 click 处理） */
 async function elementCenter(win, selector, index = 0) {
+  // Places 分页：目标条目若在非当前页会 display:none（rect 全 0），
+  // 先点对应圆点切页再取坐标。非侧边栏元素/已可见时无副作用。
+  await activateSidebarPageFor(win, selector, index);
   const r = await js(
     win,
     `(() => {
@@ -719,6 +722,39 @@ async function elementCenter(win, selector, index = 0) {
   );
   if (!r.ok || !r.value) throw new Error(`elementCenter not found: ${selector}[${index}]`);
   return r.value;
+}
+
+/**
+ * 把指定元素所在的分页切到当前页（Places 分页改造后的坐标交互前置）。
+ * 元素不在侧边栏、已处于当前页、或分页圆点不可用（收起态/单页）时
+ * 直接返回。切页后等 React 提交 data-active。
+ */
+async function activateSidebarPageFor(win, selector, index = 0) {
+  const r = await js(
+    win,
+    `(() => {
+      const el = document.querySelectorAll(${JSON.stringify(selector)})[${index}];
+      if (!el) return { changed: false };
+      const page = el.closest('.sidebar-page');
+      if (!page || page.hasAttribute('data-active')) return { changed: false };
+      const pages = [...page.parentElement.querySelectorAll('.sidebar-page')];
+      const pageIdx = pages.indexOf(page);
+      const dot = document.querySelectorAll('.sidebar-dot')[pageIdx];
+      if (!dot) return { changed: false };
+      dot.click();
+      return { changed: true };
+    })()`,
+  );
+  if (!r.ok || !r.value?.changed) return;
+  await waitFor(
+    win,
+    `(() => {
+      const el = document.querySelectorAll(${JSON.stringify(selector)})[${index}];
+      return !!el && !!el.closest('.sidebar-page')?.hasAttribute('data-active');
+    })()`,
+    { timeout: 4000 },
+  );
+  await sleep(80);
 }
 
 /**
@@ -1009,17 +1045,9 @@ async function escCloseSearch(win) {
  * 返回后设置页仍留在该标签页（再次点击导航栏按钮 = 重新导航到根）。
  */
 async function openSettingsPage(win, categoryRe) {
-  // review 30：导航栏已删除——设置入口改经 Places（侧边栏 settings 条目）
-  await js(
-    win,
-    `(() => {
-      const items = [...document.querySelectorAll('.sidebar-section:first-of-type .sidebar-item')];
-      const it = items.find((x) => (x.querySelector('md-icon')?.textContent ?? '') === 'settings');
-      it?.click();
-      return !!it;
-    })()`,
-    true,
-  );
+  // review 30：导航栏已删除——设置入口改经 Places（侧边栏 settings 条目）。
+  // Places 分页后设置条目可能在非当前页：clickPlace 会自动切页
+  await clickPlace(win, 'settings');
   await waitFor(win, `!!document.querySelector('.settings-page')`, { timeout: 8000 });
   if (categoryRe) {
     await waitFor(win, `!!document.querySelector('.settings-category-card')`, { timeout: 8000 });
@@ -1064,17 +1092,30 @@ async function scrollSettingsTo(win, selector, index = 0) {
  * home/delete/settings/terminal/widgets 等。
  */
 async function clickPlace(win, ligature) {
-  const r = await js(
-    win,
-    `(() => {
-      const items = [...document.querySelectorAll('.sidebar-section:first-of-type .sidebar-item')];
-      const it = items.find((x) => (x.querySelector('md-icon')?.textContent ?? '') === ${JSON.stringify(ligature)});
-      it?.click();
-      return !!it;
-    })()`,
-    true,
-  );
-  if (!r.ok || !r.value) throw new Error(`clickPlace: 未找到 Places 条目 ${ligature}`);
+  // Places 已分页：目标条目可能不在当前页（如矮窗口下回收站落到第 2 页），
+  // 先切页再点击；头部按钮（折叠/终端）也在此范围。
+  const expr = `(() => {
+    const items = [...document.querySelectorAll('.sidebar-page .sidebar-item, .sidebar-header .sidebar-header-btn')];
+    const it = items.find((x) => (x.querySelector('md-icon')?.textContent ?? '') === ${JSON.stringify(ligature)});
+    if (!it) return { found: false };
+    const page = it.closest('.sidebar-page');
+    if (page && !page.hasAttribute('data-active')) {
+      const pages = [...document.querySelectorAll('.sidebar-page')];
+      const dot = document.querySelectorAll('.sidebar-dot')[pages.indexOf(page)];
+      if (dot) {
+        dot.click();
+        return { found: true, switched: true };
+      }
+    }
+    it.click();
+    return { found: true, switched: false };
+  })()`;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const r = await js(win, expr, true);
+    if (!r.ok || !r.value?.found) throw new Error(`clickPlace: 未找到 Places 条目 ${ligature}`);
+    if (!r.value.switched) return;
+    await sleep(250);
+  }
 }
 
 /**
@@ -1174,6 +1215,7 @@ module.exports = {
   js,
   waitFor,
   elementCenter,
+  activateSidebarPageFor,
   clickAt,
   clickEl,
   rightClickEl,

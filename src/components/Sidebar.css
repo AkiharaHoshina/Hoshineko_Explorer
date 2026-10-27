@@ -3,62 +3,188 @@
     /* Places 单独颜色区域：与标签页栏共用 --hoshineko-places-bg
        （:root 定义，深度介于功能栏与文件区之间，随 M3 取色重解） */
     background-color: var(--hoshineko-places-bg);
-    padding: 16px;
+    /* 顶部无内边距：头部按钮行与标签条同高（52px） */
+    padding: 0 16px 16px;
     display: flex;
     flex-direction: column;
     /* 面板式布局：与导航栏、主内容区一致贴边到窗口顶部。
        去掉圆角与上下留白——圆角角落会露出 app-shell 的旧深色
        （--md-sys-color-background）形成错误的色块 */
     margin: 0;
-    /* flex 子项默认 min-height:auto 会被内容撑大超过视口，
-       导致 overflow-y:auto 永不触发、设备多时按钮溢出屏幕；
-       显式置 0 让侧边栏可收缩，滚动条才生效 */
+    /* flex 子项：允许收窄到 88px（默认 min-width:auto 会被内容撑宽） */
+    min-width: 0;
+    flex-shrink: 0;
+    /* 分页后不再有滚动条：内容超出一页由翻页消化 */
     min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-width: thin;
-    scrollbar-color: var(--md-sys-color-outline-variant) transparent;
+    overflow: hidden;
+    /* 收起（图标轨道）过渡：宽度与内边距同步 */
+    transition: width 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.sidebar::-webkit-scrollbar {
-    width: 4px;
+/* 收起态：只显示图标的窄轨道。
+   box-sizing 为 content-box（项目默认），width 不含左右 padding：
+   72 + 8×2 = 88px 实际宽度，容纳 56px 图标胶囊。 */
+.sidebar--collapsed {
+    width: 72px;
+    padding: 0 8px 12px;
 }
 
-.sidebar::-webkit-scrollbar-track {
-    background: transparent;
-    margin: 4px 0;
-    border-radius: 4px;
+/* 收起态头部竖排：88px 放不下并排两个 40px 按钮。
+   align-items:center 保证只剩折叠按钮时它在轨道内水平居中 */
+.sidebar--collapsed .sidebar-header {
+    flex-direction: column;
+    align-items: center;
+    height: auto;
+    gap: 4px;
+    /* 首个按钮顶部与标签胶囊（16px 起）对齐 */
+    padding: 16px 0 0;
 }
 
-.sidebar::-webkit-scrollbar-thumb {
-    background-color: var(--md-sys-color-outline-variant);
-    border-radius: 4px;
+@media (prefers-reduced-motion: reduce) {
+    .sidebar {
+        transition: none;
+    }
 }
 
-.sidebar::-webkit-scrollbar-thumb:hover {
-    background-color: var(--md-sys-color-outline);
+/* 头部：折叠按钮 + 终端按钮 + 圆点切换器（收起时圆点隐藏） */
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    /* 标签胶囊实际位于 16..56（.tab-bar 12+44 内容高、40 高胶囊底部对齐），
+       头部按 content-box：40 + 16 顶部内边距 = 56px 与标签条等齐 */
+    height: 40px;
+    flex-shrink: 0;
+    /* 左内边距让按钮图标与 Places 条目图标列对齐（条目 padding-left 16
+       + 图标 24 的一半 = 内容区 x=28；按钮宽 40 → 左移 8） */
+    padding: 16px 0 0 8px;
+}
+
+.sidebar-header-btn {
+    flex-shrink: 0;
+}
+
+/* 终端开启态：与 Places 内建终端入口同款弱高亮 */
+.sidebar-header-btn--active {
+    background-color: color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent);
+    color: var(--md-sys-color-on-surface);
+    border-radius: 50%;
+}
+
+.sidebar-dots {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    padding-right: 2px;
+}
+
+.sidebar-dot {
+    width: 6px;
+    height: 6px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--md-sys-color-outline-variant);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.sidebar-dot:hover {
+    background: var(--md-sys-color-outline);
+}
+
+.sidebar-dot.active {
+    background: var(--md-sys-color-primary);
+    transform: scale(1.4);
+}
+
+/* 分页容器：高度由 flex 决定，ResizeObserver 据此计算每页容量 */
+.sidebar-body {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    /* 与头部拉开一点距离：第一项紧贴头部时上边缘像被遮挡 */
+    padding-top: 8px;
+}
+
+/* 单页：一列条目，非当前页 display:none（保留 DOM 以便 e2e/拖放命中） */
+.sidebar-page {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+}
+
+.sidebar-page:not([data-active]) {
+    display: none;
+}
+
+/* 翻到新页时的滑入动画：display:none → flex 会重新触发动画；
+   方向由 flipPage 写入的 --sidebar-slide-x 决定 */
+.sidebar-page[data-active] {
+    animation: sidebar-page-in 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes sidebar-page-in {
+    from {
+        opacity: 0;
+        transform: translateX(var(--sidebar-slide-x, 24px));
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar-page[data-active] {
+        animation: none;
+    }
 }
 
 .sidebar-title {
-    margin: 0 0 12px 12px;
+    margin: 16px 0 12px 12px;
     font-size: 14px;
     font-weight: 500;
     color: var(--md-sys-color-on-surface-variant);
 }
 
-/* 首节（位置）标题行与标签条垂直对齐：
-   标题文字中心与标签页内文字中心平齐（32px），
-   列表起点（仪表盘轮廓上边）与标签页胶囊下边平齐——
-   标签页栏下移 4px 后胶囊底边为 56px，同步 +4 */
-.sidebar > .sidebar-section:first-child .sidebar-title {
-    margin: 5.5px 0 13.5px 12px;
+/* ── 收起态（图标轨道）：隐藏文字与附属控件，条目居中图标 ── */
+.sidebar--collapsed .sidebar-label,
+.sidebar--collapsed .sidebar-subtitle,
+.sidebar--collapsed .sidebar-title,
+.sidebar--collapsed .sidebar-pin-badge,
+.sidebar--collapsed .sidebar-pin-remove,
+.sidebar--collapsed .sidebar-eject-btn,
+.sidebar--collapsed .sidebar-mount-btn,
+.sidebar--collapsed .sidebar-disk-eject,
+.sidebar--collapsed .sidebar-dots {
+    display: none;
 }
 
-/* 区块间隔：固定文件夹/设备等非首区块标题与上一区块内容之间
-   留出略微间隔（标题上方此前无留白，区块间无缝衔接）；
-   首区块贴顶、添加固定按钮区保持与列表条目一致的 4px 间距（见下） */
-.sidebar > .sidebar-section:not(:first-child):not(.sidebar-pin-section) {
-    margin-top: 16px;
+.sidebar--collapsed .sidebar-item {
+    padding: 0;
+    justify-content: center;
+    border-radius: 22px;
+    gap: 0;
+    width: 56px;
+    height: 44px;
+    align-self: center;
+}
+
+.sidebar--collapsed .sidebar-device-header {
+    padding: 0;
+    justify-content: center;
+}
+
+.sidebar--collapsed .sidebar-partition-info {
+    display: none;
 }
 
 .sidebar-list {

@@ -76,6 +76,11 @@ const os = require('os');
     );
     /** 打开 Pin 固定项右键菜单 */
     const openPinMenu = async (name) => {
+      // Places 分页后固定项在第二部分页：先切到该页，否则 rect 全 0
+      await h.activateSidebarPageFor(
+        win,
+        `.sidebar-item[draggable="true"][title="${dir}/${name}"]`,
+      );
       // 先等目标按钮真正可命中：侧边栏布局异步移位（e2e 46 坑）与
       // 关闭中对话框残留 top layer 都会让 elementFromPoint 落在别处，
       // 真实输入前必须等到命中元素就是固定项自身

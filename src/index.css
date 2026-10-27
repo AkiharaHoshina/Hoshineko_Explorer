@@ -185,6 +185,10 @@ html {
   height: auto;
   display: flex;
   flex-direction: column;
+  /* 标签条绘制在左侧 Places 之上：标签焦点框/选中态凹角不会被
+     侧边栏遮挡（用户定案） */
+  position: relative;
+  z-index: 2;
   /* Chrome 风格：标签条用弱一级的容器色，选中标签自身用文件区同色，
      两者之间不再画分割线——选中页与文件区连成一片。 */
   background: var(--hoshineko-tabstrip-bg);

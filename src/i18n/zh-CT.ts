@@ -395,6 +395,10 @@ const zhCT = {
   'sidebar.already_pinned': '呢個資料夾已經固定咗',
   'sidebar.pin_via_file_manager': '用檔案管理員揀',
   'sidebar.pin_single_folder': '請拖動單個資料夾嚟固定',
+  'sidebar.collapse': '收合側邊欄',
+  'sidebar.expand': '展開側邊欄',
+  'sidebar.page': '頁',
+  'sidebar.pages': '側邊欄頁面',
 
   // ── 導航欄 ──
   'nav.dashboard': '儀表板',

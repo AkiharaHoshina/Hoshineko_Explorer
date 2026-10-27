@@ -434,6 +434,10 @@ const ukUA = {
   'sidebar.already_pinned': 'Папку вже закріплено',
   'sidebar.pin_via_file_manager': 'Вибрати через файловий менеджер',
   'sidebar.pin_single_folder': 'Перетягніть одну папку для закріплення',
+  'sidebar.collapse': 'Згорнути бічну панель',
+  'sidebar.expand': 'Розгорнути бічну панель',
+  'sidebar.page': 'Сторінка',
+  'sidebar.pages': 'Сторінки бічної панелі',
 
   // ── 导航栏 ──
   'nav.dashboard': 'Панель',

@@ -42,6 +42,17 @@ const os = require('os');
       return 'other';
     })()`);
 
+  /** 连续 Tab 直到落到目标分区（侧边栏内部新增折叠/终端停靠点，
+   *  循环长度不固定，按分区推进而非固定步数） */
+  const tabUntilZone = async (win, want, max = 14) => {
+    for (let i = 0; i < max; i++) {
+      await h.key(win, 'Tab');
+      await h.sleep(250);
+      if ((await zoneOf(win)).value === want) return true;
+    }
+    return false;
+  };
+
   await h.run('96a 编辑态迷你循环（输入框 ⇄ 进入搜索按钮）', async () => {
     const win = await h.createTestWindow({ argv: ['electron', dir] });
     await h.waitFor(win, `!!document.querySelector('.file-list-item')`);
@@ -76,15 +87,7 @@ const os = require('os');
     // → 类型 → 模式 → （词条站无历史跳过）→ 结果 → nav → sidebar →
     // tabbar → 返回上级 → 回输入框循环
     for (const want of ['topbar-sort', 'search-type', 'search-mode', 'files', 'sidebar', 'tabbar', 'topbar-up']) {
-      await h.key(win, 'Tab');
-      await h.sleep(300);
-      const dbg = await h.js(win, `(() => {
-        const a = document.activeElement;
-        return { tag: a?.tagName ?? null, cls: (a?.className?.toString?.() ?? '').slice(0, 60), zone: a?.closest?.('[data-kb-zone]')?.getAttribute('data-kb-zone') ?? null };
-      })()`);
-      console.log('DBG96b tab', JSON.stringify(dbg.value));
-      const z = await zoneOf(win);
-      h.assert.strictEqual(z.value, want, `搜索态 Tab 应落 ${want}，实际 ${z.value}`);
+      h.assert.ok(await tabUntilZone(win, want), `Tab 应落 ${want}，实际 ${(await zoneOf(win)).value}`);
     }
     // 再 Tab → 回切/回车站：焦点落搜索输入框（用户可立即输入关键词）
     await h.key(win, 'Tab');
@@ -161,10 +164,7 @@ const os = require('os');
     // 走完整圈回到输入框：sort → type → mode → (recent?) → files → nav →
     // sidebar → tabbar → up → 输入框
     for (const want of ['search-type', 'search-mode']) {
-      await h.key(win, 'Tab');
-      await h.sleep(300);
-      z = await zoneOf(win);
-      h.assert.strictEqual(z.value, want, `应落 ${want}，实际 ${z.value}`);
+      h.assert.ok(await tabUntilZone(win, want), `Tab 应落 ${want}，实际 ${(await zoneOf(win)).value}`);
     }
     const hasRecent2 = await h.js(win, `!!document.querySelector('.search-recent-chip')`);
     if (hasRecent2.value) {
@@ -174,10 +174,7 @@ const os = require('os');
       h.assert.strictEqual(z.value, 'search-recent', `应落词条站，实际 ${z.value}`);
     }
     for (const want of ['files', 'sidebar', 'tabbar', 'topbar-up', 'search-input']) {
-      await h.key(win, 'Tab');
-      await h.sleep(300);
-      z = await zoneOf(win);
-      h.assert.strictEqual(z.value, want, `应落 ${want}，实际 ${z.value}`);
+      h.assert.ok(await tabUntilZone(win, want), `Tab 应落 ${want}，实际 ${(await zoneOf(win)).value}`);
     }
     const onInput = await h.js(win, `document.activeElement === document.querySelector('.omnibar.mode-search .omnibar-input')`);
     h.assert.ok(onInput.value, '回切/回车站焦点应落搜索输入框');
@@ -217,10 +214,7 @@ const os = require('os');
     // 两站共用）→ 右上角按钮群 → （词条站：96d 已记录历史、逐轮探测）→
     // 结果 → nav → sidebar → tabbar → 回输入框
     for (const want of ['topbar-sort']) {
-      await h.key(win, 'Tab');
-      await h.sleep(300);
-      z = await zoneOf(win);
-      h.assert.strictEqual(z.value, want, `回收站搜索 Tab 应落 ${want}，实际 ${z.value}`);
+      h.assert.ok(await tabUntilZone(win, want), `Tab 应落 ${want}，实际 ${(await zoneOf(win)).value}`);
     }
     const hasRecent3 = await h.js(win, `!!document.querySelector('.search-recent-chip')`);
     if (hasRecent3.value) {
@@ -230,10 +224,7 @@ const os = require('os');
       h.assert.strictEqual(z.value, 'search-recent', `回收站搜索 Tab 应落词条站，实际 ${z.value}`);
     }
     for (const want of ['files', 'sidebar', 'tabbar']) {
-      await h.key(win, 'Tab');
-      await h.sleep(300);
-      z = await zoneOf(win);
-      h.assert.strictEqual(z.value, want, `回收站搜索 Tab 应落 ${want}，实际 ${z.value}`);
+      h.assert.ok(await tabUntilZone(win, want), `Tab 应落 ${want}，实际 ${(await zoneOf(win)).value}`);
     }
     await h.key(win, 'Tab');
     await h.sleep(300);

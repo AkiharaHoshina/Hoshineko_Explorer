@@ -249,6 +249,18 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
 - **状态检测**：`system:get-system-integration-status` 的 `portalsConf` 必须扫描通用文件 + 所有 `<desktop>-portals.conf`，只看 `portals.conf` 会在修复后误报未安装。
 - 改这里跑 e2e 18（含桌面专属、系统级副本、卸载清理场景）。脚本里读桌面列表必须 `printf '%s\n'`——无换行时 `read` 在 EOF 返回非零，`while` 循环体不会执行（本轮真实 bug）。
 
+## Places 分页与图标轨道（v3.0.1005 起）
+
+- **结构**：`Sidebar.tsx` 渲染 `<aside .sidebar>` = `.sidebar-header`（折叠按钮 + 内建终端按钮 + 圆点切换器）+ `.sidebar-body > .sidebar-page[data-active]`。第一部分（仪表盘/文件位置/设置/对象/回收站）与第二部分（已固定 → 添加固定 → 设备）**各自分页、互不混页**。
+- **全部页挂载、非当前页 `display:none`**：e2e 的程序化 `.click()` 与 `querySelectorAll` 仍能命中；代价是不可聚焦、不可测量。坐标交互前台（harness `elementCenter`）会用 `activateSidebarPageFor` 先点对应圆点切页——新增侧边栏坐标用例必须走 `h.clickEl`/`h.elementCenter`，直接用 `elementFromPoint` 要先切页。
+- **分页常量**：`ROW_H=56`、`COLLAPSED_ROW_H=44`、`ROW_GAP=4`、`SECTION_TITLE_H=32`、`DEVICE_HEADER_H=32`。改 `Sidebar.css` 行高必须同步常量（组件内有首项实测断言，不一致会 `console.warn`）。
+- **展开/收起宽度用 content-box 计算**：`.sidebar` 是 content-box（项目默认），展开 `width:200px + padding 16×2 = 232`；收起 `width:72px + padding 8×2 = 88px`（图标胶囊 56、高度 44）。改宽度时按实际像素核对。
+- **收起态（图标轨道）**：只显示图标、圆点隐藏、恒定第 0 页；`showTerminalPlace` 控制头部终端按钮；折叠与终端按钮都用 `menu` 图标，按钮图标列与条目图标列对齐（header `padding-left: 8px`）。
+- **Tab 序列**：进入 sidebar 分区先落折叠按钮 → 终端按钮 → 当前页条目 → 放行到 tabbar。e2e 里凡是「一次 Tab 一个分区」的断言都要改成按分区推进（`tabUntilZone`），不要再按固定步数。
+- **翻页手势**：鼠标滚轮只用 `deltaY`；触控板只用 `deltaX`（判定：`deltaX !== 0` 或垂直增量不是 100/120 整数倍即视为触控板）。触摸拖动跟手位移（阻尼 72px）+ 松手滑入动画；动画靠 `display:none → flex` 重新触发，方向由 `--sidebar-slide-x` 决定。
+- **拖放**：没有滚动容器，边缘自动滚动改为**边缘自动翻页**（停留 450ms 翻一页）；`data-sidebar-pin-zone` 挂在每个 page 容器上；排序拖拽的 `from/gap` 始终用全局索引。
+- e2e：`111-places-pagination-collapse.test.cjs`（页数/不混页/圆点/滚轮/触控板/收起/对齐/Tab 序列）；改动这里同时跑 25/26/46/47/52/65/95/96/97/100/103/104/110。
+
 ## 注意事项
 
 一定要写jsdoc！写字段说明！！！写i18n！！

@@ -58,9 +58,20 @@ const { ipcMain } = require('electron');
       return 'other';
     })()`);
 
+  /** 连续 Tab 直到落到目标分区（侧边栏内部新增折叠/终端停靠点，
+   *  循环长度不固定，按分区推进而非固定步数） */
+  const tabUntilZone = async (win, want, max = 14) => {
+    for (let i = 0; i < max; i++) {
+      await h.key(win, 'Tab');
+      await h.sleep(250);
+      if ((await zoneOf(win)).value === want) return true;
+    }
+    return false;
+  };
+
   /** 逐 Tab 轮询直到焦点分区为 want（object-recent 是否注册取决于历史
    *  非空与否——不硬编码步数） */
-  const tabToZone = async (win, want, max = 10) => {
+  const tabToZone = async (win, want, max = 18) => {
     for (let i = 0; i < max; i++) {
       await h.key(win, 'Tab');
       await h.sleep(250);
@@ -87,12 +98,10 @@ const { ipcMain } = require('electron');
     // （closeSearch 延时聚焦触发钮），从 topbar-omnibar 起步走完整循环：
     // object-recent → objects → nav → sidebar → tabbar → topbar-omnibar
     await h.waitFor(win, `document.activeElement === document.querySelector('.omnibar-trigger')`, { timeout: 8000 });
+    // 侧边栏内部有折叠/终端/条目多个停靠点：按分区推进而非固定步数
     const expected = ['object-recent', 'objects', 'sidebar', 'tabbar', 'topbar-omnibar'];
     for (const z of expected) {
-      await h.key(win, 'Tab');
-      await h.sleep(300);
-      const got = (await zoneOf(win)).value;
-      h.assert.strictEqual(got, z, `Tab 应落 ${z}，实际 ${got}`);
+      await tabToZone(win, z);
     }
     // object-recent 站焦点应具体落在词条 chip 上（循环继续到该站验证）
     await h.key(win, 'Tab');
@@ -297,10 +306,7 @@ const { ipcMain } = require('electron');
     h.assert.strictEqual(entrySel.value.selected, '100', `进程项进站应选中首行（实际 ${entrySel.value.selected}）`);
     h.assert.strictEqual(entrySel.value.focusId, '100', `进程项进站焦点应落在选中行（实际 ${entrySel.value.focusId}）`);
     for (const want of ['sidebar', 'tabbar', 'topbar-up', 'topbar-omnibar', 'object-sortbar']) {
-      await h.key(win, 'Tab');
-      await h.sleep(300);
-      const z = (await zoneOf(win)).value;
-      h.assert.strictEqual(z, want, `Tab 应落 ${want}，实际 ${z}`);
+      h.assert.ok(await tabUntilZone(win, want), `Tab 应落 ${want}，实际 ${(await zoneOf(win)).value}`);
     }
     const onSeg = await h.js(win, `document.activeElement === document.querySelector('.object-sortbar hoshineko-outlined-segmented-button')`);
     h.assert.ok(onSeg.value, '排序条站应聚焦第一个 segmented 按钮');

@@ -15,6 +15,7 @@ import { shouldSuppressDrop } from "../utils/nativeDragTracker";
 import { setPinReorderDragActive } from "../utils/pinReorderDrag";
 import { registerKeyboardZone } from "../utils/focusZones";
 import { isObjectDrag, readObjectDrag, type ObjectDragPayload } from "../utils/objectDrag";
+import { useLocalStorage } from "../hooks/useLocalStorage";
 
 /** 侧边栏固定目录条目（仅目录，与仪表盘固定项相互独立） */
 export interface SidebarPinnedItem {
@@ -137,12 +138,68 @@ const TARGET_PREFIX_GVFS = "gvfs:";
 /** 固定按钮的拖放目标标识（拖单个文件夹到按钮上固定） */
 const TARGET_PIN = "pin:";
 
-/** 拖拽自动滚动：距侧边栏上下边缘多近开始滚动（像素）。
- *  此前 64px 触发区过小——长 Places/固定列表拖到边缘要贴得很近才滚动，
- *  放宽到 96px（速度仍随靠近边缘线性升至最大） */
+/**
+ * 拖拽边缘自动翻页：光标进入侧边栏上/下边缘区的判定距离（像素）。
+ * 分页后没有滚动容器，跨页拖放靠"贴着边缘停留 → 翻页"实现。
+ */
 const EDGE_ZONE_PX = 96;
-/** 拖拽自动滚动：每帧最大滚动速度（像素/帧，约 60fps 下 ≈ 960px/s） */
-const AUTO_SCROLL_MAX_STEP = 16;
+/** 边缘停留多久翻一页（毫秒）；持续停留会连续翻页 */
+const EDGE_FLIP_INTERVAL_MS = 450;
+
+/**
+ * 分页尺寸常量（像素），必须与 Sidebar.css 保持一致：
+ * `.sidebar-item` 高 56、列表 gap 4、区块标题行 32、设备组头 32。
+ * 首次布局后用实测条目高度校验（见 measureRowHeight），不一致时以
+ * 实测值为准并告警——CSS 改了但常量忘了改时能立刻发现。
+ */
+const ROW_H = 56;
+/** 收起（图标轨道）态条目高度：图标化后不需要 56px 的文字胶囊高度 */
+const COLLAPSED_ROW_H = 44;
+const ROW_GAP = 4;
+const SECTION_TITLE_H = 32;
+/** 区块标题的上外边距（非页首的区块标题才有） */
+const SECTION_TITLE_TOP = 16;
+/** 设备组头（磁盘名行）高度 */
+const DEVICE_HEADER_H = 32;
+/** 分页内容区顶部内边距（.sidebar-body padding-top），需从可用高度中扣除 */
+const BODY_TOP_PADDING = 8;
+/** 滚轮/触控板翻页阈值（累计位移像素） */
+const WHEEL_FLIP_THRESHOLD = 48;
+/** 翻页冷却（毫秒）：防止惯性/高频事件连续翻过多页 */
+const WHEEL_FLIP_COOLDOWN_MS = 300;
+/** 触摸横向拖动翻页阈值 */
+const TOUCH_FLIP_THRESHOLD = 48;
+
+/**
+ * 一个可参与分页的渲染节点：高度用于分页计算，node 为实际内容。
+ * 高度含条目自身的下间距（gap），页容量按累计高度比较。
+ */
+interface SidebarNode {
+  key: string;
+  height: number;
+  node: React.ReactNode;
+}
+
+/**
+ * 把节点列表按可用高度切页：累计高度超过 capacity 就换页；
+ * 单个节点本身高于 capacity 时独占一页（不无限递归）。
+ */
+function paginateNodes(nodes: SidebarNode[], capacity: number): SidebarNode[][] {
+  const pages: SidebarNode[][] = [];
+  let current: SidebarNode[] = [];
+  let used = 0;
+  for (const node of nodes) {
+    if (current.length > 0 && used + node.height > capacity) {
+      pages.push(current);
+      current = [];
+      used = 0;
+    }
+    current.push(node);
+    used += node.height;
+  }
+  if (current.length > 0) pages.push(current);
+  return pages;
+}
 
 /** 在设备树中递归查找指定 devicePath 的设备/分区（纯函数，模块级） */
 function findDeviceByPath(list: AllDevice[], devicePath: string): AllDevice | null {
@@ -200,65 +257,84 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const { getDragState, endDrag } = useDrag();
 
-  /** 侧边栏滚动容器（边缘自动滚动操作对象） */
+  /** 侧边栏容器（拖拽边缘翻页的边界参照） */
   const asideRef = useRef<HTMLElement | null>(null);
+
+  /** 分页内容区（尺寸测量对象；不再是滚动容器） */
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * 收起态（图标轨道）：状态留在 Sidebar 内部，绝不提升到 App——
+   * ExplorerTab 未 memo，App 任何 setState 都会重渲染所有标签页。
+   */
+  const [collapsed, setCollapsed] = useLocalStorage<boolean>(
+    'sidebar.collapsed',
+    false,
+  );
+
+  /** 当前页索引（展开态有效；收起态恒为第 0 页） */
+  const [pageIndex, setPageIndex] = useState(0);
+
+  /** 分页内容区可用高度（ResizeObserver 实测，0 表示尚未测量） */
+  const [bodyHeight, setBodyHeight] = useState(0);
 
   /** 键盘导航最近聚焦的条目（Tab 分区切换时聚焦回它） */
   const kbFocusRef = useRef<HTMLElement | null>(null);
 
+  /** 当前页内的可交互条目（分页后其它页为 display:none，不可聚焦） */
+  const activePageItems = useCallback((): HTMLElement[] => {
+    const aside = asideRef.current;
+    if (!aside) return [];
+    const page = aside.querySelector<HTMLElement>('.sidebar-page[data-active]');
+    if (!page) return [];
+    return Array.from(page.querySelectorAll<HTMLElement>('.sidebar-item'));
+  }, []);
+
   /**
    * 键盘分区（sidebar）：主窗口与选择器窗口均注册——Tab 分区循环聚焦
    * 进来时落到当前路径对应条目（或上次聚焦条目/首项）；区内 ↑/↓ 在
-   * 全部可交互条目（位置/固定项/设备）间按可视顺序移动焦点，Enter/Space
+   * 当前页的可交互条目间移动焦点，跨页边界自动翻页，Enter/Space
    * 由条目自身处理（原生按钮/既有 onKeyDown）。
    */
   useEffect(() => {
     return registerKeyboardZone({
       id: 'sidebar',
       focus: () => {
-        const aside = asideRef.current;
-        if (!aside) return;
-        const items = Array.from(aside.querySelectorAll<HTMLElement>('.sidebar-item, .sidebar-partition'));
-        if (items.length === 0) return;
+        // 只在当前页内找焦点目标：其它页为 display:none，focus() 静默失败
+        const items = activePageItems();
+        const all = items.length > 0
+          ? items
+          : Array.from(asideRef.current?.querySelectorAll<HTMLElement>('.sidebar-item') ?? []);
+        if (all.length === 0) return;
+        // 用户定案：Tab 循环要经过折叠按钮与内建终端按钮——进入分区时
+        // 先落在头部第一个按钮，再由区内 Tab 依次前进到条目
+        const headerBtn = asideRef.current?.querySelector<HTMLElement>('.sidebar-header-btn');
+        if (headerBtn) {
+          headerBtn.focus();
+          return;
+        }
+        const page = asideRef.current?.querySelector<HTMLElement>('.sidebar-page[data-active]');
         const target =
-          items.find((el) => el.classList.contains('active')) ??
-          (kbFocusRef.current && aside.contains(kbFocusRef.current) ? kbFocusRef.current : null) ??
-          items[0];
+          all.find((el) => el.classList.contains('active')) ??
+          (kbFocusRef.current && page?.contains(kbFocusRef.current) ? kbFocusRef.current : null) ??
+          all[0];
         target.focus();
       },
     });
-     
-  }, []);
 
-  /** 区内键盘：↑/↓ 按可视顺序（DOM 顺序）在可交互条目间循环移动焦点；
-   *  Enter 显式点击焦点按钮——原生按钮的 Enter→click 合成对注入型键盘
-   *  事件（e2e/辅助工具）不可靠，且 div 条目（固定/分区）自带 onKeyDown
-   *  处理 Enter/Space，这里只处理原生 BUTTON，避免双重激活 */
-  const handleSidebarKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      e.stopPropagation();
-      const aside = asideRef.current;
-      if (!aside) return;
-      const items = Array.from(aside.querySelectorAll<HTMLElement>('.sidebar-item, .sidebar-partition'));
+  }, [activePageItems]);
+
+  /**
+   * 翻页后把焦点落到新页的首/末条（rAF：等 React 提交 DOM 更新）。
+   * 收起态恒为第 0 页，不需要处理。
+   */
+  const focusEdgeItem = useCallback((position: 'first' | 'last') => {
+    requestAnimationFrame(() => {
+      const items = activePageItems();
       if (items.length === 0) return;
-      const cur = document.activeElement as HTMLElement | null;
-      const idx = cur ? items.indexOf(cur) : -1;
-      const next = e.key === 'ArrowDown'
-        ? (idx + 1) % items.length
-        : (idx <= 0 ? items.length - 1 : idx - 1);
-      items[next]?.focus();
-      return;
-    }
-    if (e.key === 'Enter') {
-      const t = e.target as HTMLElement | null;
-      if (t && t.tagName === 'BUTTON' && asideRef.current?.contains(t)) {
-        e.preventDefault();
-        e.stopPropagation();
-        t.click();
-      }
-    }
-  };
+      (position === 'first' ? items[0] : items[items.length - 1])?.focus();
+    });
+  }, [activePageItems]);
 
   // 供文档级监听器读取最新数据（监听器在 effect 中注册一次，见 TabBar 同款模式）
   const placesRef = useRef(places);
@@ -340,74 +416,93 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const externalDisks = devices.filter(isExternalDevice);
 
-  // ── 拖拽自动滚动 ──
+  // ── 分页状态与翻页（取代原滚动容器方案） ──
 
-  /** rAF 循环句柄；null 表示未在滚动 */
-  const autoScrollRef = useRef<number | null>(null);
-  /** 最近一次 dragover 的 Y 坐标（循环每帧读取） */
-  const lastDragYRef = useRef<number>(0);
+
   /**
-   * 自动滚动循环函数的最新引用：tickAutoScroll 自调度下一帧，
-   * 经此 ref 间接引用，保持 useCallback 引用稳定。
+   * 翻页：delta = ±1，自动夹在 [0, pageCount-1]。
+   * 页数以参数传入（调用方各自持有当次渲染的 pageCount），避免 ref 同步。
    */
-  const tickAutoScrollRef = useRef<() => void>(() => {});
+  const flipPage = useCallback((delta: number, count: number) => {
+    if (count <= 1) return;
+    // 新页从翻页方向的对侧滑入（动画在 display:none → flex 时重新触发）
+    asideRef.current?.style.setProperty(
+      '--sidebar-slide-x',
+      delta > 0 ? '24px' : '-24px',
+    );
+    setPageIndex((prev) => Math.max(0, Math.min(prev + delta, count - 1)));
+  }, []);
 
-  const stopAutoScroll = useCallback(() => {
-    if (autoScrollRef.current !== null) {
-      cancelAnimationFrame(autoScrollRef.current);
-      autoScrollRef.current = null;
-    }
+  /** 分页内容区尺寸测量：可用高度决定每页容纳多少条目 */
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const update = () => setBodyHeight(el.clientHeight - BODY_TOP_PADDING);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   /**
-   * 边缘自动滚动循环：光标贴近侧边栏上下边缘时持续滚动，
-   * 越靠边缘速度越快；离开边缘区由 updateAutoScroll 停止。
-   * 每帧通过 ref 间接调度自身，避免 useCallback 自引用。
+   * 行高常量校验：CSS 改了但 ROW_H 忘了改时，分页会出现半条截断或
+   * 大片空白。以实测条目高度为准并告警（不自动改常量——常量在模块级）。
    */
-  const tickAutoScroll = useCallback(() => {
-    autoScrollRef.current = requestAnimationFrame(tickAutoScrollRef.current);
-    const el = asideRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const y = lastDragYRef.current;
-    let step = 0;
-    if (y < rect.top + EDGE_ZONE_PX) {
-      step = -AUTO_SCROLL_MAX_STEP *
-        Math.min(1, (rect.top + EDGE_ZONE_PX - y) / EDGE_ZONE_PX);
-    } else if (y > rect.bottom - EDGE_ZONE_PX) {
-      step = AUTO_SCROLL_MAX_STEP *
-        Math.min(1, (y - (rect.bottom - EDGE_ZONE_PX)) / EDGE_ZONE_PX);
-    }
-    if (step !== 0) {
-      el.scrollTop = Math.max(
-        0,
-        Math.min(el.scrollTop + step, el.scrollHeight - el.clientHeight),
+  useEffect(() => {
+    const item = bodyRef.current?.querySelector<HTMLElement>('.sidebar-item');
+    if (!item) return;
+    const h = Math.round(item.getBoundingClientRect().height);
+    const expected = collapsed ? COLLAPSED_ROW_H : ROW_H;
+    if (h > 0 && h !== expected) {
+      console.warn(
+        `[sidebar] 条目实测高度 ${h}px 与分页常量 ${expected}px 不一致，` +
+        '分页可能出现截断/空白，请同步 ROW_H（Sidebar.tsx）与 .sidebar-item（Sidebar.css）',
       );
     }
+  }, [collapsed, places.length, pinnedDirs.length, devices.length, gvfsVolumes.length]);
+
+  // ── 拖拽边缘自动翻页（原边缘自动滚动的替代） ──
+
+  /** 边缘翻页定时器与当前方向（0 = 不在边缘区） */
+  const edgeFlipRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const edgeDirRef = useRef<0 | -1 | 1>(0);
+
+  const stopEdgeFlip = useCallback(() => {
+    if (edgeFlipRef.current !== null) {
+      clearInterval(edgeFlipRef.current);
+      edgeFlipRef.current = null;
+    }
+    edgeDirRef.current = 0;
   }, []);
 
-  useEffect(() => {
-    tickAutoScrollRef.current = tickAutoScroll;
-  }, [tickAutoScroll]);
-
   /**
-   * 根据光标 Y 坐标更新自动滚动状态：进入边缘区启动 rAF 循环，
-   * 离开边缘区停止。dragover 事件持续到达，驱动状态切换。
+   * 拖拽中把光标 Y 映射为翻页方向：进入上/下边缘区后每
+   * EDGE_FLIP_INTERVAL_MS 翻一页（持续停留可连续翻页），离开即停。
+   * 分页后没有滚动容器，这是跨页拖放的唯一途径。
    */
-  const updateAutoScroll = useCallback((clientY: number) => {
-    lastDragYRef.current = clientY;
+  const updateDragEdge = useCallback((clientY: number) => {
     const el = asideRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const inZone =
-      clientY < rect.top + EDGE_ZONE_PX ||
-      clientY > rect.bottom - EDGE_ZONE_PX;
-    if (inZone && autoScrollRef.current === null) {
-      autoScrollRef.current = requestAnimationFrame(tickAutoScroll);
-    } else if (!inZone) {
-      stopAutoScroll();
+    if (!el) {
+      stopEdgeFlip();
+      return;
     }
-  }, [stopAutoScroll, tickAutoScroll]);
+    const rect = el.getBoundingClientRect();
+    let dir: 0 | -1 | 1 = 0;
+    if (clientY < rect.top + EDGE_ZONE_PX) dir = -1;
+    else if (clientY > rect.bottom - EDGE_ZONE_PX) dir = 1;
+    if (dir === 0) {
+      stopEdgeFlip();
+      return;
+    }
+    if (edgeDirRef.current === dir) return;
+    stopEdgeFlip();
+    edgeDirRef.current = dir;
+    // 页数从 DOM 读取：回调保持稳定，不因翻页重建文档级监听
+    const count = el.querySelectorAll('.sidebar-page').length;
+    edgeFlipRef.current = setInterval(() => flipPage(dir, count), EDGE_FLIP_INTERVAL_MS);
+  }, [flipPage, stopEdgeFlip]);
+
+  useEffect(() => () => stopEdgeFlip(), [stopEdgeFlip]);
 
   // ── 同窗口拖放到侧边栏条目 ──
 
@@ -526,9 +621,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         // 在侧边栏内即驱动边缘自动滚动（固定项多时「添加固定」按钮
         // 可能被推到折叠线下方——拖到上下边缘滚动以露出落点）
         if (hit?.closest?.('.sidebar')) {
-          updateAutoScroll(e.clientY);
+          updateDragEdge(e.clientY);
         } else {
-          stopAutoScroll();
+          stopEdgeFlip();
           setDragOverTarget(null);
           return;
         }
@@ -560,25 +655,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
       if (!dragState || dragState.files.length === 0) {
         // 非内部拖拽：不接受，也不高亮
         setDragOverTarget(null);
-        stopAutoScroll();
+        stopEdgeFlip();
         return;
       }
       const target = resolveTargetAt(e.clientX, e.clientY);
       if (!target) {
         setDragOverTarget(null);
-        stopAutoScroll();
+        stopEdgeFlip();
         return;
       }
       // 接受放置：drop 事件才会派发
       e.preventDefault();
       e.dataTransfer!.dropEffect = e.shiftKey ? "copy" : "move";
       setDragOverTarget(target);
-      updateAutoScroll(e.clientY);
+      updateDragEdge(e.clientY);
     };
 
     const onDrop = (e: DragEvent) => {
       setDragOverTarget(null);
-      stopAutoScroll();
+      stopEdgeFlip();
       // 对象投影松手：只有「添加固定」按钮接受（与 dragover 同源判定；
       // 载荷 MIME 优先，原生拖出回落 DragContext 登记）
       const objectDragPayload = readObjectDrag(e) ?? getDragState()?.object ?? null;
@@ -624,7 +719,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     // 拖拽结束（真实或合成）时清除高亮与自动滚动，杜绝"高亮卡死"
     const onDragEnd = () => {
       setDragOverTarget(null);
-      stopAutoScroll();
+      stopEdgeFlip();
     };
 
     document.addEventListener("dragover", onDragOver, true);
@@ -634,9 +729,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       document.removeEventListener("dragover", onDragOver, true);
       document.removeEventListener("drop", onDrop, true);
       document.removeEventListener("dragend", onDragEnd, true);
-      stopAutoScroll();
+      stopEdgeFlip();
     };
-  }, [getDragState, handleSidebarDrop, stopAutoScroll, updateAutoScroll, isPicker]);
+  }, [getDragState, handleSidebarDrop, stopEdgeFlip, updateDragEdge, isPicker]);
 
   /**
    * gvfs 卷点击：已挂载 → 进入目录；未挂载 → 挂载后进入。
@@ -950,9 +1045,609 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setPinDrag(null);
   };
 
+  // ── 分页节点 ──
+  // 第一部分（固定快捷方式）与第二部分（固定目录 + 设备）各自独立分页，
+  // 互不混页。节点高度含条目下间距，供 paginateNodes 切页。
+
+  /** 第一部分：仪表盘 → 文件位置 → 设置 → 对象面板 → 回收站 */
+  const fixedNodes: SidebarNode[] = (() => {
+    const nodes: SidebarNode[] = [];
+    const itemH = (collapsed ? COLLAPSED_ROW_H : ROW_H) + ROW_GAP;
+
+    if (!isPicker && showDashboardPlace) {
+      const active = currentPath === "app://dashboard";
+      nodes.push({
+        key: "fixed:dashboard",
+        height: itemH,
+        node: (
+          <button
+            key="fixed:dashboard"
+            className={`sidebar-item ${active ? "active" : ""}`}
+            tabIndex={-1}
+            title={t("sidebar.dashboard")}
+            onClick={() => onNavigate("app://dashboard")}
+            onContextMenu={(e) => {
+              if (!onPlaceContextMenu) return;
+              e.preventDefault();
+              e.stopPropagation();
+              onPlaceContextMenu(e, {
+                name: "Dashboard",
+                path: "app://dashboard",
+                icon: "dashboard",
+              });
+            }}
+          >
+            <Icon name="dashboard" className="sidebar-icon" filled={active} />
+            <span className="sidebar-label">
+              <MarqueeText enabled={marqueeEnabled}>{t("sidebar.dashboard")}</MarqueeText>
+            </span>
+          </button>
+        ),
+      });
+    }
+
+    // 文件位置（主页/桌面/文档/…）：该位置已被固定时，高亮让位给固定条目
+    for (const place of places.filter((p) => p.name !== "Trash")) {
+      const pinnedSamePath = pinnedDirs.some((p) => p.path === place.path);
+      const active = !pinnedSamePath && currentPath === place.path;
+      const label = getPlaceLabel(place.name);
+      nodes.push({
+        key: `fixed:place:${place.path}`,
+        height: itemH,
+        node: (
+          <button
+            key={`fixed:place:${place.path}`}
+            className={`sidebar-item ${active ? "active" : ""} ${dragOverTarget === `${TARGET_PREFIX_PLACE}${place.path}` ? "drag-over" : ""}`}
+            data-sidebar-target={`${TARGET_PREFIX_PLACE}${place.path}`}
+            tabIndex={-1}
+            title={label}
+            onClick={() => onNavigate(place.path)}
+            onContextMenu={(e) => {
+              if (!onPlaceContextMenu) return;
+              e.preventDefault();
+              e.stopPropagation();
+              onPlaceContextMenu(e, place);
+            }}
+          >
+            <Icon
+              name={getPlaceIcon(place.name)}
+              className="sidebar-icon"
+              filled={!pinnedSamePath && currentPath.startsWith(place.path)}
+            />
+            <span className="sidebar-label">
+              <MarqueeText enabled={marqueeEnabled}>{label}</MarqueeText>
+            </span>
+          </button>
+        ),
+      });
+    }
+
+    if (!isPicker) {
+      const active = currentPath.startsWith("settings://");
+      nodes.push({
+        key: "fixed:settings",
+        height: itemH,
+        node: (
+          <button
+            key="fixed:settings"
+            className={`sidebar-item ${active ? "active" : ""}`}
+            tabIndex={-1}
+            title={t("settings.title")}
+            onClick={() => onNavigate("settings://")}
+          >
+            <Icon name="settings" className="sidebar-icon" filled={active} />
+            <span className="sidebar-label">
+              <MarqueeText enabled={marqueeEnabled}>{t("settings.title")}</MarqueeText>
+            </span>
+          </button>
+        ),
+      });
+    }
+
+    if (!isPicker && showObjectsPlace) {
+      const active = currentPath.startsWith("objects://");
+      nodes.push({
+        key: "fixed:objects",
+        height: itemH,
+        node: (
+          <button
+            key="fixed:objects"
+            className={`sidebar-item ${active ? "active" : ""}`}
+            tabIndex={-1}
+            title={t("objects.title")}
+            onClick={() => onNavigate("objects://")}
+          >
+            <Icon name="widgets" className="sidebar-icon" filled={active} />
+            <span className="sidebar-label">
+              <MarqueeText enabled={marqueeEnabled}>{t("objects.title")}</MarqueeText>
+            </span>
+          </button>
+        ),
+      });
+    }
+
+    if (!hideTrash) {
+      const place = places.find((p) => p.name === "Trash");
+      if (place) {
+        const pinnedSamePath = pinnedDirs.some((p) => p.path === place.path);
+        const active = !pinnedSamePath && currentPath === place.path;
+        const label = getPlaceLabel(place.name);
+        nodes.push({
+          key: `fixed:place:${place.path}`,
+          height: itemH,
+          node: (
+            <button
+              key={`fixed:place:${place.path}`}
+              className={`sidebar-item ${active ? "active" : ""} ${dragOverTarget === `${TARGET_PREFIX_PLACE}${place.path}` ? "drag-over" : ""}`}
+              data-sidebar-target={`${TARGET_PREFIX_PLACE}${place.path}`}
+              tabIndex={-1}
+              title={label}
+              onClick={() => onNavigate(place.path)}
+              onContextMenu={(e) => {
+                if (!onPlaceContextMenu) return;
+                e.preventDefault();
+                e.stopPropagation();
+                onPlaceContextMenu(e, place);
+              }}
+            >
+              <Icon
+                name={getPlaceIcon(place.name)}
+                className="sidebar-icon"
+                filled={!pinnedSamePath && currentPath.startsWith(place.path)}
+              />
+              <span className="sidebar-label">
+                <MarqueeText enabled={marqueeEnabled}>{label}</MarqueeText>
+              </span>
+            </button>
+          ),
+        });
+      }
+    }
+
+    return nodes;
+  })();
+
+  /** 第二部分：已固定目录（含拖拽占位）→ 添加固定按钮 → 设备 */
+  const pinnedNodes: SidebarNode[] = (() => {
+    const nodes: SidebarNode[] = [];
+    const itemH = (collapsed ? COLLAPSED_ROW_H : ROW_H) + ROW_GAP;
+    const titleH = SECTION_TITLE_H + SECTION_TITLE_TOP + ROW_GAP;
+
+    if (pinnedDirs.length > 0) {
+      nodes.push({
+        key: "pinned:title",
+        height: titleH,
+        node: <h3 key="pinned:title" className="sidebar-title">{t("sidebar.pinned")}</h3>,
+      });
+      for (const entry of pinRenderList) {
+        if (entry.kind === "gap") {
+          nodes.push({
+            key: `pinned:gap:${entry.gap}`,
+            height: itemH,
+            node: (
+              <div
+                key={`pinned:gap:${entry.gap}`}
+                className="sidebar-item sidebar-pin-gap"
+                onDragOver={(e) => handlePinGapDragOver(e, entry.gap)}
+                onDrop={(e) => handlePinGapDrop(e, entry.gap)}
+              />
+            ),
+          });
+          continue;
+        }
+        const item = entry.item;
+        const origIndex = entry.origIndex;
+        nodes.push({
+          key: `pinned:${item.path}`,
+          // 拖拽中的源条目 display:none，不占高度
+          height: entry.hidden ? 0 : itemH,
+          node: (
+            <div
+              key={`pinned:${item.path}`}
+              className={`sidebar-item ${entry.hidden ? "sidebar-pin-source-hidden" : ""} ${currentPath === item.path ? "active" : ""} ${dragOverTarget === `${TARGET_PREFIX_PLACE}${item.path}` ? "drag-over" : ""}`}
+              data-sidebar-target={`${TARGET_PREFIX_PLACE}${item.path}`}
+              role="button"
+              tabIndex={-1}
+              title={item.path}
+              draggable={!isPicker && !!onReorderPin}
+              onDragStart={(e) => handlePinReorderDragStart(e, origIndex)}
+              onDragOver={(e) => handlePinReorderDragOver(e, origIndex)}
+              onDrop={(e) => handlePinReorderDrop(e, origIndex)}
+              onDragEnd={handlePinReorderDragEnd}
+              onContextMenu={(e) => {
+                if (isPicker || !onPinnedContextMenu) return;
+                e.preventDefault();
+                e.stopPropagation();
+                onPinnedContextMenu(e, item);
+              }}
+              onClick={() => onNavigate(item.path)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onNavigate(item.path);
+                }
+              }}
+            >
+              <Icon
+                name={item.icon ?? "folder"}
+                className="sidebar-icon"
+                filled={currentPath === item.path}
+              />
+              <span className="sidebar-label sidebar-pin-label">
+                <MarqueeText enabled={marqueeEnabled}>{item.name}</MarqueeText>
+              </span>
+              {showPinBadges && origIndex < 9 && (
+                <span className="sidebar-pin-badge">{origIndex + 1}</span>
+              )}
+              {!isPicker && (
+                <IconButton
+                  variant="standard"
+                  onClick={(e) => handleRemovePinned(e, item.path)}
+                  className="sidebar-pin-remove"
+                  title={t("sidebar.unpin")}
+                >
+                  <Icon name="close" />
+                </IconButton>
+              )}
+            </div>
+          ),
+        });
+      }
+    }
+
+    if (!isPicker) {
+      nodes.push({
+        key: "pinned:add",
+        height: itemH,
+        node: (
+          <div key="pinned:add" className="sidebar-section sidebar-pin-section">
+            <div className="sidebar-list" data-sidebar-pin-zone="">
+              <button
+                className={`sidebar-item sidebar-add-pin ${dragOverTarget === TARGET_PIN ? "drag-over" : ""}`}
+                data-sidebar-target={TARGET_PIN}
+                tabIndex={-1}
+                title={t("sidebar.add_pin")}
+                onClick={() => { void handlePickPinDir(); }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setPinMenuPos({ x: e.clientX, y: e.clientY });
+                }}
+              >
+                <Icon name="add" className="sidebar-icon" />
+                <span className="sidebar-label">
+                  <MarqueeText enabled={marqueeEnabled}>{t("sidebar.add_pin")}</MarqueeText>
+                </span>
+              </button>
+            </div>
+          </div>
+        ),
+      });
+    }
+
+    if (externalDisks.length > 0 || gvfsVolumes.length > 0) {
+      nodes.push({
+        key: "devices:title",
+        height: titleH,
+        node: <h3 key="devices:title" className="sidebar-title">{t("sidebar.devices")}</h3>,
+      });
+
+      for (const disk of externalDisks) {
+        const parts = disk.children && disk.children.length > 0 ? disk.children : null;
+        nodes.push({
+          key: `device:${disk.name}`,
+          height: DEVICE_HEADER_H + (parts ? parts.length * itemH : itemH),
+          node: (
+            <div key={`device:${disk.name}`} className="sidebar-device-group">
+              {parts ? (
+                <>
+                  <div
+                    className="sidebar-device-header"
+                    title={`${disk.model || disk.label || disk.name} · ${disk.devicePath}`}
+                  >
+                    <Icon name={getDiskIcon(disk)} className="sidebar-icon" />
+                    <span className="sidebar-label">
+                      <MarqueeText enabled={marqueeEnabled}>
+                        {disk.model || disk.label || disk.name}
+                      </MarqueeText>
+                    </span>
+                    <div style={{ flex: 1 }} />
+                    {isExternalDevice(disk) &&
+                      disk.children?.every((part) => !part.mounted) && (
+                      <IconButton
+                        variant="standard"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeviceEject?.(disk.devicePath);
+                        }}
+                        className="sidebar-disk-eject"
+                        title={t("device.eject")}
+                      >
+                        <Icon name="eject" />
+                      </IconButton>
+                    )}
+                  </div>
+                  {parts.map((part) => (
+                    <SidebarPartitionItem
+                      key={part.name}
+                      device={part}
+                      isActive={!!(part.mounted && part.mountpoint && currentPath.startsWith(part.mountpoint))}
+                      onPartitionClick={handlePartitionClick}
+                      onDeviceContextMenu={onDeviceContextMenu}
+                      onDeviceMount={onDeviceMount}
+                      onDeviceUnmount={onDeviceUnmount}
+                      marqueeEnabled={marqueeEnabled}
+                      dropTarget={`${TARGET_PREFIX_DEVICE}${part.devicePath}`}
+                      dragOver={dragOverTarget === `${TARGET_PREFIX_DEVICE}${part.devicePath}`}
+                      tabIndex={-1}
+                    />
+                  ))}
+                </>
+              ) : (
+                <SidebarPartitionItem
+                  device={disk}
+                  isActive={!!(disk.mounted && disk.mountpoint && currentPath.startsWith(disk.mountpoint))}
+                  onPartitionClick={handlePartitionClick}
+                  onDeviceContextMenu={onDeviceContextMenu}
+                  onDeviceMount={onDeviceMount}
+                  onDeviceUnmount={onDeviceUnmount}
+                  onDeviceEject={onDeviceEject}
+                  marqueeEnabled={marqueeEnabled}
+                  showEject
+                  dropTarget={`${TARGET_PREFIX_DEVICE}${disk.devicePath}`}
+                  dragOver={dragOverTarget === `${TARGET_PREFIX_DEVICE}${disk.devicePath}`}
+                  tabIndex={-1}
+                />
+              )}
+            </div>
+          ),
+        });
+      }
+
+      for (const volume of gvfsVolumes) {
+        const isActive = !!volume.mountpoint && currentPath.startsWith(volume.mountpoint);
+        const gvfsKey = volume.mountpoint ?? volume.deviceId ?? volume.name;
+        nodes.push({
+          key: `gvfs:${gvfsKey}`,
+          height: itemH,
+          node: (
+            <div
+              key={`gvfs:${gvfsKey}`}
+              className={`sidebar-item sidebar-partition ${!volume.mounted ? "unmounted" : ""} ${isActive ? "active" : ""} ${dragOverTarget === `${TARGET_PREFIX_GVFS}${gvfsKey}` ? "drag-over" : ""}`}
+              data-sidebar-target={`${TARGET_PREFIX_GVFS}${gvfsKey}`}
+              role="button"
+              tabIndex={-1}
+              title={volume.mountpoint ?? volume.deviceId ?? volume.name}
+              onClick={() => { void handleGvfsClick(volume); }}
+              onContextMenu={(e) => onGvfsContextMenu?.(e, volume)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  void handleGvfsClick(volume);
+                }
+              }}
+            >
+              <Icon
+                name={volume.kind === "gphoto2" ? "photo_camera" : "smartphone"}
+                className="sidebar-icon"
+              />
+              <div className="sidebar-partition-info">
+                <span className="sidebar-label">
+                  <MarqueeText enabled={marqueeEnabled}>{volume.name}</MarqueeText>
+                </span>
+                <span className="sidebar-subtitle">
+                  <MarqueeText enabled={marqueeEnabled}>
+                    {volume.mounted && volume.mountpoint
+                      ? volume.mountpoint
+                      : volume.kind === "gphoto2"
+                        ? t("device.type_gphoto2")
+                        : t("device.type_mtp")}
+                  </MarqueeText>
+                </span>
+              </div>
+              {!volume.mounted ? (
+                volume.deviceId && (
+                  <IconButton
+                    variant="standard"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleGvfsClick(volume);
+                    }}
+                    className="sidebar-mount-btn"
+                    title={t("device.mount")}
+                  >
+                    <Icon name="power" />
+                  </IconButton>
+                )
+              ) : (
+                <IconButton
+                  variant="standard"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onGvfsUnmount?.(volume);
+                  }}
+                  className="sidebar-eject-btn"
+                  title={t("device.unmount")}
+                >
+                  <Icon name="eject" />
+                </IconButton>
+              )}
+            </div>
+          ),
+        });
+      }
+    }
+
+    return nodes;
+  })();
+
+  // ── 切页：两组分别分页后拼接，收起态恒为第 0 页 ──
+  const pages: SidebarNode[][] = (() => {
+    const capacity = bodyHeight > 0 ? bodyHeight : 600;
+    const fixedPages = paginateNodes(fixedNodes, capacity);
+    const pinnedPages = paginateNodes(pinnedNodes, capacity);
+    const all = [...fixedPages, ...pinnedPages];
+    return all.length > 0 ? all : [[]];
+  })();
+
+  const pageCount = pages.length;
+  const currentPage = collapsed ? 0 : Math.min(pageIndex, pageCount - 1);
+
+  /** 区内键盘：↑/↓ 在当前页条目间移动焦点，越过页边界自动翻页；
+   *  Enter 显式点击焦点按钮——原生按钮的 Enter→click 合成对注入型键盘
+   *  事件（e2e/辅助工具）不可靠，且 div 条目（固定/分区）自带 onKeyDown
+   *  处理 Enter/Space，这里只处理原生 BUTTON，避免双重激活 */
+  const handleSidebarKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Tab') {
+      // 区内 Tab 序列：折叠按钮 → 内建终端按钮 → 当前页条目…
+      // 序列尽头不 preventDefault，交给全局分区循环
+      const aside = asideRef.current;
+      const cur = document.activeElement as HTMLElement | null;
+      if (!aside || !cur) return;
+      const headerBtns = Array.from(
+        aside.querySelectorAll<HTMLElement>('.sidebar-header-btn'),
+      );
+      const items = activePageItems();
+      const hi = headerBtns.indexOf(cur);
+      if (!e.shiftKey) {
+        if (hi >= 0 && hi < headerBtns.length - 1) {
+          e.preventDefault();
+          e.stopPropagation();
+          headerBtns[hi + 1].focus();
+          return;
+        }
+        if (hi >= 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          items[0]?.focus();
+          return;
+        }
+        return;
+      }
+      if (hi > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        headerBtns[hi - 1].focus();
+        return;
+      }
+      if (hi === 0) return;
+      if (items.indexOf(cur) === 0 && headerBtns.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        headerBtns[headerBtns.length - 1].focus();
+      }
+      return;
+    }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      e.stopPropagation();
+      const items = activePageItems();
+      if (items.length === 0) return;
+      const cur = document.activeElement as HTMLElement | null;
+      const idx = cur ? items.indexOf(cur) : -1;
+      const down = e.key === 'ArrowDown';
+      if (idx === -1) {
+        // 焦点在头部按钮上：↓ 进第一个条目，↑ 进最后一个条目
+        (down ? items[0] : items[items.length - 1])?.focus();
+        return;
+      }
+      const next = idx + (down ? 1 : -1);
+      if (next < 0) {
+        if (currentPage > 0) {
+          flipPage(-1, pageCount);
+          focusEdgeItem('last');
+        }
+        return;
+      }
+      if (next >= items.length) {
+        if (currentPage < pageCount - 1) {
+          flipPage(1, pageCount);
+          focusEdgeItem('first');
+        }
+        return;
+      }
+      items[next]?.focus();
+      return;
+    }
+    if (e.key === 'Enter') {
+      const t = e.target as HTMLElement | null;
+      if (t && t.tagName === 'BUTTON' && asideRef.current?.contains(t)) {
+        e.preventDefault();
+        e.stopPropagation();
+        t.click();
+      }
+    }
+  };
+
+  const showDots = !collapsed && pageCount > 1;
+
+  const wheelAccRef = useRef(0);
+  const wheelLastFlipRef = useRef(0);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleSidebarWheel = (e: React.WheelEvent) => {
+    if (pageCount <= 1) return;
+    if (pinReorderActiveRef.current || getDragState()) return;
+    // 输入设备区分（用户定案）：
+    // - 鼠标滚轮：只看垂直 deltaY；
+    // - 触控板：只看横向 deltaX（横向滑动翻页，垂直滚动不翻）。
+    // 判定：鼠标滚轮无横向分量且垂直步长为 100/120 的整数倍；
+    // 其余（带 deltaX 或小/小数增量）按触控板处理。
+    const isMouseWheel =
+      e.deltaX === 0 &&
+      (e.deltaY % 100 === 0 || e.deltaY % 120 === 0);
+    const isTrackpad = !isMouseWheel;
+    const delta = isTrackpad ? e.deltaX : e.deltaY;
+    if (!delta) return;
+    const now = performance.now();
+    if (now - wheelLastFlipRef.current < WHEEL_FLIP_COOLDOWN_MS) return;
+    wheelAccRef.current += delta;
+    if (Math.abs(wheelAccRef.current) >= WHEEL_FLIP_THRESHOLD) {
+      flipPage(wheelAccRef.current > 0 ? 1 : -1, pageCount);
+      wheelAccRef.current = 0;
+      wheelLastFlipRef.current = now;
+    }
+  };
+
+  /** 触摸横向滑动翻页（鼠标拖动不参与） */
+  const handleSidebarPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === 'mouse') return;
+    touchStartRef.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handleSidebarPointerMove = (e: React.PointerEvent) => {
+    const start = touchStartRef.current;
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (Math.abs(dx) <= Math.abs(dy)) return;
+    const page = asideRef.current?.querySelector<HTMLElement>('.sidebar-page[data-active]');
+    if (!page) return;
+    // 跟手位移 + 阻尼（最多 72px）
+    const resisted = Math.max(-72, Math.min(72, dx));
+    page.style.transition = 'none';
+    page.style.transform = `translateX(${resisted}px)`;
+  };
+
+  const handleSidebarPointerUp = (e: React.PointerEvent) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    const page = asideRef.current?.querySelector<HTMLElement>('.sidebar-page[data-active]');
+    if (page) {
+      page.style.transition = '';
+      page.style.transform = '';
+    }
+    if (Math.abs(dx) >= TOUCH_FLIP_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+      flipPage(dx < 0 ? 1 : -1, pageCount);
+    }
+  };
+
+
   return (
     <aside
-      className="sidebar"
+      className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`}
       ref={asideRef}
       data-kb-zone="sidebar"
       onKeyDown={handleSidebarKeyDown}
@@ -963,394 +1658,66 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }
       }}
     >
-      <div className="sidebar-section">
-        <h3 className="sidebar-title">{t("sidebar.places")}</h3>
-        <div className="sidebar-list">
-          {!isPicker && showDashboardPlace && (
-            <button
-              className={`sidebar-item ${currentPath === "app://dashboard" ? "active" : ""}`}
-              tabIndex={-1}
-              onClick={() => onNavigate("app://dashboard")}
-              onContextMenu={(e) => {
-                if (!onPlaceContextMenu) return;
-                e.preventDefault();
-                e.stopPropagation();
-                onPlaceContextMenu(e, {
-                  name: "Dashboard",
-                  path: "app://dashboard",
-                  icon: "dashboard",
-                });
-              }}
-            >
-              <Icon
-                name="dashboard"
-                className="sidebar-icon"
-                filled={currentPath === "app://dashboard"}
-              />
-              <span className="sidebar-label">
-                <MarqueeText enabled={marqueeEnabled}>{t("sidebar.dashboard")}</MarqueeText>
-              </span>
-            </button>
-          )}
-          {/* review 29.2：文件位置（主页/桌面/文档/下载/音乐/图片/视频）
-              紧接仪表盘；该 Place 已被用户固定时，高亮让位给固定条目
-              （避免两处同时高亮） */}
-          {places
-            .filter((place) => place.name !== "Trash")
-            .map((place) => {
-              const pinnedSamePath = pinnedDirs.some((p) => p.path === place.path);
-              return (
-                <button
-                  key={place.path}
-                  className={`sidebar-item ${!pinnedSamePath && currentPath === place.path ? "active" : ""} ${dragOverTarget === `${TARGET_PREFIX_PLACE}${place.path}` ? "drag-over" : ""}`}
-                  data-sidebar-target={`${TARGET_PREFIX_PLACE}${place.path}`}
-                  tabIndex={-1}
-                  onClick={() => onNavigate(place.path)}
-                  onContextMenu={(e) => {
-                    if (!onPlaceContextMenu) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onPlaceContextMenu(e, place);
-                  }}
-                >
-                  <Icon
-                    name={getPlaceIcon(place.name)}
-                    className="sidebar-icon"
-                    filled={!pinnedSamePath && currentPath.startsWith(place.path)}
-                  />
-                  <span className="sidebar-label">
-                    <MarqueeText enabled={marqueeEnabled}>{getPlaceLabel(place.name)}</MarqueeText>
-                  </span>
-                </button>
-              );
-            })}
-          {/* 设置页入口（review 26）：位于文件位置之后；仅主窗口 */}
-          {!isPicker && (
-            <button
-              className={`sidebar-item ${currentPath.startsWith("settings://") ? "active" : ""}`}
-              tabIndex={-1}
-              onClick={() => onNavigate("settings://")}
-            >
-              <Icon
-                name="settings"
-                className="sidebar-icon"
-                filled={currentPath.startsWith("settings://")}
-              />
-              <span className="sidebar-label">
-                <MarqueeText enabled={marqueeEnabled}>{t("settings.title")}</MarqueeText>
-              </span>
-            </button>
-          )}
-          {/* Object Panel（objects:// 虚拟页集）入口：设置下方；
-              选择器不支持 objects://（无该虚拟页渲染），仅主窗口显示 */}
-          {!isPicker && showObjectsPlace && (
-            <button
-              className={`sidebar-item ${currentPath.startsWith("objects://") ? "active" : ""}`}
-              tabIndex={-1}
-              onClick={() => onNavigate("objects://")}
-            >
-              <Icon
-                name="widgets"
-                className="sidebar-icon"
-                filled={currentPath.startsWith("objects://")}
-              />
-              <span className="sidebar-label">
-                <MarqueeText enabled={marqueeEnabled}>{t("objects.title")}</MarqueeText>
-              </span>
-            </button>
-          )}
-          {/* 内建终端入口（review 29 #15）：对象下方；点击 = toggle
-              终端（与导航栏终端按钮同行为）；开启时高亮为更次要的
-              color-mix primary 10%（review 29.2 调低） */}
-          {!isPicker && showTerminalPlace && (
-            <button
-              className={`sidebar-item${terminalOpen ? ' active sidebar-item--terminal-active' : ''}`}
-              tabIndex={-1}
-              onClick={() => onToggleTerminal?.()}
-            >
-              <Icon
-                name="terminal"
-                className="sidebar-icon"
-                filled={terminalOpen}
-              />
-              <span className="sidebar-label">
-                <MarqueeText enabled={marqueeEnabled}>{t("settings.cat_terminal")}</MarqueeText>
-              </span>
-            </button>
-          )}
-          {/* 回收站：末位（review 29.2 顺序定案） */}
-          {!hideTrash && (() => {
-            const place = places.find((p) => p.name === "Trash");
-            if (!place) return null;
-            const pinnedSamePath = pinnedDirs.some((p) => p.path === place.path);
-            return (
+      <div className="sidebar-header">
+        {!isPicker && (
+          <IconButton
+            variant="standard"
+            className="sidebar-header-btn sidebar-collapse-btn"
+            title={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+            ariaLabel={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+            onClick={() => setCollapsed((prev) => !prev)}
+          >
+            <Icon name="menu" />
+          </IconButton>
+        )}
+        {!isPicker && showTerminalPlace && (
+          <IconButton
+            variant="standard"
+            className={`sidebar-header-btn sidebar-terminal-btn${terminalOpen ? " sidebar-header-btn--active" : ""}`}
+            title={t("settings.cat_terminal")}
+            ariaLabel={t("settings.cat_terminal")}
+            onClick={() => onToggleTerminal?.()}
+          >
+            <Icon name="terminal" filled={terminalOpen} />
+          </IconButton>
+        )}
+        {showDots && (
+          <nav className="sidebar-dots" aria-label={t("sidebar.pages")}>
+            {pages.map((_, i) => (
               <button
-                key={place.path}
-                className={`sidebar-item ${!pinnedSamePath && currentPath === place.path ? "active" : ""} ${dragOverTarget === `${TARGET_PREFIX_PLACE}${place.path}` ? "drag-over" : ""}`}
-                data-sidebar-target={`${TARGET_PREFIX_PLACE}${place.path}`}
+                key={`dot-${i}`}
+                type="button"
+                className={`sidebar-dot${i === currentPage ? " active" : ""}`}
+                aria-label={`${t("sidebar.page")} ${i + 1}`}
+                aria-current={i === currentPage ? "true" : undefined}
                 tabIndex={-1}
-                onClick={() => onNavigate(place.path)}
-                onContextMenu={(e) => {
-                  if (!onPlaceContextMenu) return;
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onPlaceContextMenu(e, place);
-                }}
-              >
-                <Icon
-                  name={getPlaceIcon(place.name)}
-                  className="sidebar-icon"
-                  filled={!pinnedSamePath && currentPath.startsWith(place.path)}
-                />
-                <span className="sidebar-label">
-                  <MarqueeText enabled={marqueeEnabled}>{getPlaceLabel(place.name)}</MarqueeText>
-                </span>
-              </button>
-            );
-          })()}
-        </div>
+                onClick={() => setPageIndex(i)}
+              />
+            ))}
+          </nav>
+        )}
       </div>
 
-      {pinnedDirs.length > 0 && (
-        <div className="sidebar-section">
-          <h3 className="sidebar-title">{t("sidebar.pinned")}</h3>
+      <div
+        className="sidebar-body"
+        ref={bodyRef}
+        onWheel={handleSidebarWheel}
+        onPointerDown={handleSidebarPointerDown}
+        onPointerMove={handleSidebarPointerMove}
+        onPointerUp={handleSidebarPointerUp}
+      >
+        {pages.map((nodes, i) => (
           <div
-            className="sidebar-list"
+            key={`page-${i}`}
+            className="sidebar-page"
+            data-active={i === currentPage ? "" : undefined}
             data-sidebar-pin-zone=""
             onDragLeave={handlePinReorderListLeave}
           >
-            {pinRenderList.map((entry) => {
-              if (entry.kind === 'gap') {
-                return (
-                  <div
-                    key={`pin-gap-${entry.gap}`}
-                    className="sidebar-item sidebar-pin-gap"
-                    onDragOver={(e) => handlePinGapDragOver(e, entry.gap)}
-                    onDrop={(e) => handlePinGapDrop(e, entry.gap)}
-                  />
-                );
-              }
-              const item = entry.item;
-              const origIndex = entry.origIndex;
-              return (
-                <div
-                  key={item.path}
-                  className={`sidebar-item ${entry.hidden ? "sidebar-pin-source-hidden" : ""} ${currentPath === item.path ? "active" : ""} ${dragOverTarget === `${TARGET_PREFIX_PLACE}${item.path}` ? "drag-over" : ""}`}
-                  data-sidebar-target={`${TARGET_PREFIX_PLACE}${item.path}`}
-                  role="button"
-                  tabIndex={-1}
-                  draggable={!isPicker && !!onReorderPin}
-                  onDragStart={(e) => handlePinReorderDragStart(e, origIndex)}
-                  onDragOver={(e) => handlePinReorderDragOver(e, origIndex)}
-                  onDrop={(e) => handlePinReorderDrop(e, origIndex)}
-                  onDragEnd={handlePinReorderDragEnd}
-                  onContextMenu={(e) => {
-                    if (isPicker || !onPinnedContextMenu) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onPinnedContextMenu(e, item);
-                  }}
-                  onClick={() => onNavigate(item.path)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onNavigate(item.path);
-                    }
-                  }}
-                  title={item.path}
-                >
-                  <Icon
-                    name={item.icon ?? "folder"}
-                    className="sidebar-icon"
-                    // 仅当前打开的固定目录实心：此前用 startsWith，嵌套固定
-                    // （A 与 A/B 同时固定、打开 B）时 A 与 B 图标都实心
-                    filled={currentPath === item.path}
-                  />
-                  <span className="sidebar-label sidebar-pin-label">
-                    <MarqueeText enabled={marqueeEnabled}>{item.name}</MarqueeText>
-                  </span>
-                  {showPinBadges && origIndex < 9 && (
-                    <span className="sidebar-pin-badge">{origIndex + 1}</span>
-                  )}
-                  {!isPicker && (
-                    <IconButton
-                      variant="standard"
-                      onClick={(e) => handleRemovePinned(e, item.path)}
-                      className="sidebar-pin-remove"
-                      title={t("sidebar.unpin")}
-                    >
-                      <Icon name="close" />
-                    </IconButton>
-                  )}
-                </div>
-              );
-            })}
+            {nodes.map((n) => n.node)}
           </div>
-        </div>
-      )}
-
-      {!isPicker && (
-        <div className="sidebar-section sidebar-pin-section">
-          <div className="sidebar-list" data-sidebar-pin-zone="">
-            <button
-              className={`sidebar-item sidebar-add-pin ${dragOverTarget === TARGET_PIN ? "drag-over" : ""}`}
-              data-sidebar-target={TARGET_PIN}
-              tabIndex={-1}
-              onClick={() => { void handlePickPinDir(); }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setPinMenuPos({ x: e.clientX, y: e.clientY });
-              }}
-              title={t("sidebar.add_pin")}
-            >
-              <Icon name="add" className="sidebar-icon" />
-              <span className="sidebar-label">
-                <MarqueeText enabled={marqueeEnabled}>{t("sidebar.add_pin")}</MarqueeText>
-              </span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {(externalDisks.length > 0 || gvfsVolumes.length > 0) && (
-        <div className="sidebar-section">
-          <h3 className="sidebar-title">{t("sidebar.devices")}</h3>
-          <div className="sidebar-list">
-            {externalDisks.map((disk) => (
-              <div key={disk.name} className="sidebar-device-group">
-                {disk.children && disk.children.length > 0 ? (
-                  <>
-                    <div
-                      className="sidebar-device-header"
-                      title={`${disk.model || disk.label || disk.name} · ${disk.devicePath}`}
-                    >
-                      <Icon name={getDiskIcon(disk)} className="sidebar-icon" />
-                      <span className="sidebar-label">
-                        <MarqueeText enabled={marqueeEnabled}>
-                          {disk.model || disk.label || disk.name}
-                        </MarqueeText>
-                      </span>
-                      <div style={{ flex: 1 }} />
-                      {isExternalDevice(disk) &&
-                        disk.children?.every((part) => !part.mounted) && (
-                        <IconButton
-                          variant="standard"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeviceEject?.(disk.devicePath);
-                          }}
-                          className="sidebar-disk-eject"
-                          title={t("device.eject")}
-                        >
-                          <Icon name="eject" />
-                        </IconButton>
-                      )}
-                    </div>
-                    {disk.children.map((part) => (
-                      <SidebarPartitionItem
-                        key={part.name}
-                        device={part}
-                        isActive={!!(part.mounted && part.mountpoint && currentPath.startsWith(part.mountpoint))}
-                        onPartitionClick={handlePartitionClick}
-                        onDeviceContextMenu={onDeviceContextMenu}
-                        onDeviceMount={onDeviceMount}
-                        onDeviceUnmount={onDeviceUnmount}
-                        marqueeEnabled={marqueeEnabled}
-                        dropTarget={`${TARGET_PREFIX_DEVICE}${part.devicePath}`}
-                        dragOver={dragOverTarget === `${TARGET_PREFIX_DEVICE}${part.devicePath}`}
-                        tabIndex={-1}
-                      />
-                    ))}
-                  </>
-                ) : (
-                  <SidebarPartitionItem
-                    device={disk}
-                    isActive={!!(disk.mounted && disk.mountpoint && currentPath.startsWith(disk.mountpoint))}
-                    onPartitionClick={handlePartitionClick}
-                    onDeviceContextMenu={onDeviceContextMenu}
-                    onDeviceMount={onDeviceMount}
-                    onDeviceUnmount={onDeviceUnmount}
-                    onDeviceEject={onDeviceEject}
-                    marqueeEnabled={marqueeEnabled}
-                    showEject
-                    dropTarget={`${TARGET_PREFIX_DEVICE}${disk.devicePath}`}
-                    dragOver={dragOverTarget === `${TARGET_PREFIX_DEVICE}${disk.devicePath}`}
-                    tabIndex={-1}
-                  />
-                )}
-              </div>
-            ))}
-            {gvfsVolumes.map((volume) => {
-              const isActive = !!volume.mountpoint && currentPath.startsWith(volume.mountpoint);
-              const gvfsKey = volume.mountpoint ?? volume.deviceId ?? volume.name;
-              return (
-                <div
-                  key={gvfsKey}
-                  className={`sidebar-item sidebar-partition ${!volume.mounted ? "unmounted" : ""} ${isActive ? "active" : ""} ${dragOverTarget === `${TARGET_PREFIX_GVFS}${gvfsKey}` ? "drag-over" : ""}`}
-                  data-sidebar-target={`${TARGET_PREFIX_GVFS}${gvfsKey}`}
-                  role="button"
-                  tabIndex={-1}
-                  onClick={() => { void handleGvfsClick(volume); }}
-                  onContextMenu={(e) => onGvfsContextMenu?.(e, volume)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      void handleGvfsClick(volume);
-                    }
-                  }}
-                  title={volume.mountpoint ?? volume.deviceId ?? volume.name}
-                >
-                  <Icon
-                    name={volume.kind === "gphoto2" ? "photo_camera" : "smartphone"}
-                    className="sidebar-icon"
-                  />
-                  <div className="sidebar-partition-info">
-                    <span className="sidebar-label">
-                      <MarqueeText enabled={marqueeEnabled}>{volume.name}</MarqueeText>
-                    </span>
-                    <span className="sidebar-subtitle">
-                      <MarqueeText enabled={marqueeEnabled}>
-                        {volume.mounted && volume.mountpoint
-                          ? volume.mountpoint
-                          : volume.kind === "gphoto2"
-                            ? t("device.type_gphoto2")
-                            : t("device.type_mtp")}
-                      </MarqueeText>
-                    </span>
-                  </div>
-                  {!volume.mounted ? (
-                    volume.deviceId && (
-                      <IconButton
-                        variant="standard"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleGvfsClick(volume);
-                        }}
-                        className="sidebar-mount-btn"
-                        title={t("device.mount")}
-                      >
-                        <Icon name="power" />
-                      </IconButton>
-                    )
-                  ) : (
-                    <IconButton
-                      variant="standard"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onGvfsUnmount?.(volume);
-                      }}
-                      className="sidebar-eject-btn"
-                      title={t("device.unmount")}
-                    >
-                      <Icon name="eject" />
-                    </IconButton>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+        ))}
+      </div>
 
       {!isPicker && pinMenuPos && (
         <ContextMenu

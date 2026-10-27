@@ -406,6 +406,10 @@ const enUS = {
   'sidebar.already_pinned': 'This folder is already pinned',
   'sidebar.pin_via_file_manager': 'Select via file manager',
   'sidebar.pin_single_folder': 'Drag a single folder to pin it',
+  'sidebar.collapse': 'Collapse sidebar',
+  'sidebar.expand': 'Expand sidebar',
+  'sidebar.page': 'Page',
+  'sidebar.pages': 'Sidebar pages',
 
   // ── 导航栏 ──
   'nav.dashboard': 'Dashboard',

@@ -34,6 +34,17 @@ const { ipcMain } = require('electron');
       return a.closest('[data-kb-zone]')?.getAttribute('data-kb-zone') ?? 'other';
     })()`);
 
+  /** 连续 Tab 直到落到目标分区（侧边栏内部新增折叠/终端停靠点，
+   *  循环长度不固定，按分区推进而非固定步数） */
+  const tabUntilZone = async (win, want, max = 14) => {
+    for (let i = 0; i < max; i++) {
+      await h.key(win, 'Tab');
+      await h.sleep(250);
+      if ((await zoneOf(win)).value === want) return true;
+    }
+    return false;
+  };
+
   const enterSearch = async (win) => {
     await h.clickEl(win, '.omnibar-trigger');
     await h.waitFor(win, `!!document.querySelector('.omnibar.mode-edit .omnibar-input')`);
@@ -67,10 +78,7 @@ const { ipcMain } = require('electron');
     // 从输入框起步走完整序列（review 23）：右上角按钮群 → 类型 → 模式 →
     // 最小大小 → 最大大小 → 确认 → （词条站无历史跳过）→ 结果 → nav
     for (const want of ['topbar-sort', 'search-type', 'search-mode', 'search-size-min', 'search-size-max', 'search-confirm', 'files']) {
-      await h.key(win, 'Tab');
-      await h.sleep(300);
-      const z = await zoneOf(win);
-      h.assert.strictEqual(z.value, want, `大小筛选序列 Tab 应落 ${want}，实际 ${z.value}`);
+      h.assert.ok(await tabUntilZone(win, want), `Tab 应落 ${want}，实际 ${(await zoneOf(win)).value}`);
     }
     // Shift+Tab 回确认站验证具体落点：.search-confirm-size
     await h.key(win, 'Tab', ['shift']);
@@ -89,10 +97,7 @@ const { ipcMain } = require('electron');
     await h.waitFor(win, `!!document.querySelector('.search-ext-input')`, { timeout: 8000 });
 
     for (const want of ['topbar-sort', 'search-type', 'search-mode', 'search-ext-input', 'search-format-add', 'search-format-quickadd', 'search-confirm', 'files']) {
-      await h.key(win, 'Tab');
-      await h.sleep(300);
-      const z = await zoneOf(win);
-      h.assert.strictEqual(z.value, want, `格式筛选序列 Tab 应落 ${want}，实际 ${z.value}`);
+      h.assert.ok(await tabUntilZone(win, want), `Tab 应落 ${want}，实际 ${(await zoneOf(win)).value}`);
     }
     // Shift+Tab 回确认站验证具体落点：.search-confirm-format
     await h.key(win, 'Tab', ['shift']);
@@ -134,10 +139,7 @@ const { ipcMain } = require('electron');
     // 完整循环走一圈回输入框——回切/回车两站焦点都应落搜索输入框
     // （对象搜索无 topbar-sort/类型/模式/条件站——注册跳过）
     for (const want of ['search-filters', 'objects', 'sidebar', 'tabbar', 'search-input']) {
-      await h.key(win, 'Tab');
-      await h.sleep(300);
-      const z = await zoneOf(win);
-      h.assert.strictEqual(z.value, want, `对象搜索 Tab 应落 ${want}，实际 ${z.value}`);
+      h.assert.ok(await tabUntilZone(win, want), `Tab 应落 ${want}，实际 ${(await zoneOf(win)).value}`);
     }
     const onInput = await h.js(win, `document.activeElement === document.querySelector('.omnibar.mode-search .omnibar-input')`);
     h.assert.ok(onInput.value, '对象搜索回切/回车两站焦点应落搜索框');

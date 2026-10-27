@@ -37,6 +37,17 @@ const h = require('./harness.cjs');
         return a.closest('[data-kb-zone]')?.getAttribute('data-kb-zone') ?? (a.classList.contains('file-list-item') ? 'file-item' : 'other');
       })()`);
 
+  /** 连续 Tab 直到落到目标分区（侧边栏内部新增折叠/终端两个停靠点，
+   *  循环长度不再固定，按分区判定推进） */
+  const tabUntilZone = async (win, want, max = 14) => {
+    for (let i = 0; i < max; i++) {
+      await h.key(win, 'Tab');
+      await h.sleep(250);
+      if ((await zoneOf(win)).value === want) return true;
+    }
+    return false;
+  };
+
     // 1) 点击选中 a.txt → Tab 进 files 分区：review 24 焦点落**选中行**
     //    （白框只框选中单项——:focus-visible 焦点环），既有选中保持不变
     await h.clickEl(win, `.file-list-item[data-path="${dir}/a.txt"]`);
@@ -70,10 +81,8 @@ const h = require('./harness.cjs');
     //     Folders 组最前）——Space 取消选中 → Tab 满循环一周回 files 分区
     await h.key(win, 'Space');
     await h.sleep(200);
-    for (let i = 0; i < 6; i++) { await h.key(win, 'Tab'); await h.sleep(300); }
-    await h.sleep(300);
+    h.assert.ok(await tabUntilZone(win, 'files'), '满循环后应回到 files 分区');
     z = await zoneOf();
-    h.assert.strictEqual(z.value, 'files', `满循环后焦点应回 files 分区，实际 ${z.value}`);
     const firstVisibleSel = await h.js(win, `document.querySelector('.file-list-item.selected')?.dataset.path ?? null`);
     h.assert.ok(
       firstVisibleSel.value && firstVisibleSel.value.endsWith('/sub'),
@@ -137,10 +146,7 @@ const h = require('./harness.cjs');
     h.assert.strictEqual(title.value, 'Hoshineko Nya~', '侧边栏 Enter 应激活仪表盘条目');
 
     // 7) 仪表盘分区循环：sidebar（焦点仍在其上）→ tabbar → 存储子区 → 固定项子区 → 最近访问子区
-    await h.key(win, 'Tab');
-    await h.sleep(300);
-    z = await zoneOf();
-    h.assert.strictEqual(z.value, 'tabbar', `sidebar 后 Tab 应在 tabbar，实际 ${z.value}`);
+    h.assert.ok(await tabUntilZone(win, 'tabbar'), 'sidebar 后 Tab 应到 tabbar');
 
     await h.key(win, 'Tab');
     await h.sleep(300);
@@ -170,14 +176,8 @@ const h = require('./harness.cjs');
     await h.waitFor(win, `document.querySelectorAll('.file-list-item').length > 0`, { timeout: 8000 });
 
     // 8) 文件页顶栏三站：tabbar → 返回上级键 → 地址栏内 → 分类排序 → files
-    await h.key(win, 'Tab');
-    await h.sleep(300);
-    z = await zoneOf();
-    h.assert.strictEqual(z.value, 'sidebar', '仪表盘退出后 Tab 应循环到 sidebar（review 30 导航栏已删）');
-    await h.key(win, 'Tab');
-    await h.sleep(300);
-    z = await zoneOf();
-    h.assert.strictEqual(z.value, 'tabbar', 'sidebar 后 Tab 应在 tabbar');
+    h.assert.ok(await tabUntilZone(win, 'sidebar'), '仪表盘退出后 Tab 应循环到 sidebar（review 30 导航栏已删）');
+    h.assert.ok(await tabUntilZone(win, 'tabbar'), 'sidebar 后 Tab 应在 tabbar');
     await h.key(win, 'Tab');
     await h.sleep(300);
     z = await zoneOf();
