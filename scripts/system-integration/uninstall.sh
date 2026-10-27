@@ -33,6 +33,10 @@ PORTALS_CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/xdg-desktop-portal"
 PORTAL_PREF_LINE="org.freedesktop.impl.portal.FileChooser=hoshineko"
 # 安装时新建的用户级配置清单（桌面配置副本/通用文件）：卸载时整份删除
 PORTALS_CREATED_LIST="$PORTALS_CONF_DIR/.hoshineko-portals-created"
+# GTK 门户开关（安装时写入的 environment.d，卸载时删除并撤销会话变量）
+ENV_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/environment.d"
+ENV_CONF="$ENV_DIR/60-hoshineko-portal.conf"
+ENV_CREATED_LIST="$ENV_DIR/.hoshineko-created"
 # 固定安装路径（可经环境变量覆盖：测试沙箱 / 定制安装，与 install.sh 一致）
 SYSTEM_BIN="${HOSHINEKO_SYSTEM_BIN:-/usr/local/bin/HoshinekoFM}"
 USER_BIN="${HOSHINEKO_USER_BIN:-$HOME/.local/bin/HoshinekoFM}"
@@ -273,11 +277,27 @@ user_uninstall() {
     rm -f "$PORTALS_CREATED_LIST"
   fi
 
+  # GTK_USE_PORTAL：只删除安装时由我们创建的文件，用户自建的配置不动
+  if [ -f "$ENV_CREATED_LIST" ] && grep -qxF "$ENV_CONF" "$ENV_CREATED_LIST" 2>/dev/null; then
+    rm -f "$ENV_CONF"
+    echo "[user] ${ENV_CONF} 已删除（安装时新建）"
+  elif [ -f "$ENV_CONF" ] && grep -qx 'GTK_USE_PORTAL=1' "$ENV_CONF" 2>/dev/null; then
+    echo "[user] ${ENV_CONF} 保留（非本应用独占，如需撤销请手动删除）"
+  fi
+  rm -f "$ENV_CREATED_LIST"
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user unset-environment GTK_USE_PORTAL 2>/dev/null || true
+  fi
+
   # 重启 portal 服务（配置移除生效）。--no-block：systemctl 只入队立即
   # 返回——portal 单元卡在 activating（会话总线被僵尸占名拖死）时阻塞式
   # restart 会永久挂起，导致卸载流程永不返回、应用侧按钮一直忙碌禁用；
   # timeout 作双保险。
   if command -v systemctl >/dev/null 2>&1; then
+    # 先清 failed 计数：反复安装/重启会触发 systemd start-limit-hit，
+    # 之后任何 start 都被拒绝，portal 直接不可用（FileChooser 消失，
+    # 所有应用回落到自带对话框）——这是"装了却不生效"的真实成因之一。
+    timeout 20 systemctl --user reset-failed xdg-desktop-portal.service 2>/dev/null || true
     timeout 20 systemctl --user --no-block restart xdg-desktop-portal.service 2>/dev/null || true
     echo "[user] xdg-desktop-portal 服务已重启"
   fi

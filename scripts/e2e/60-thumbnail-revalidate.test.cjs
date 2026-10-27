@@ -57,6 +57,16 @@ const crypto = require('crypto');
     await waitForFile(cacheFile);
     await waitForFile(stampFile);
 
+    // 缩略图保持原比例：contain（不裁切/不拉伸成 1:1）
+    const fit = await h.js(
+      win,
+      `(() => {
+        const img = document.querySelector('.file-thumbnail');
+        return img ? getComputedStyle(img).objectFit : null;
+      })()`,
+    );
+    h.assert.strictEqual(fit.value, 'contain', `缩略图应为 object-fit: contain（实际 ${fit.value}）`);
+
     const loadImg = (win, src) => h.js(
       win,
       `new Promise((resolve) => {

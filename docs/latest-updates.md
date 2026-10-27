@@ -1,5 +1,22 @@
 # 更新日志
 
+## v3.0.1006 — GTK 应用走门户 + 缩略图比例
+
+- 版本号升至 `3.0.1006`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1006.AppImage` / `HoshinekoFM-3.0.1006-size.AppImage`。
+- **缩略图保持原比例**：`.file-thumbnail` 的 `object-fit` 由 `cover` 改为
+  `contain`（`FileList/Row.tsx` 与 `FileList.css` 同步），不再被裁成 1:1。
+- **根因**：GTK 的 `GtkFileChooserNative` 只有 `GTK_USE_PORTAL=1` 时才请求
+  xdg-desktop-portal。LocalSend 等 GTK/Flutter 程序默认直接弹自带对话框，
+  从不经过门户，改 `portals.conf` 也不会生效。
+- 一键安装写入 `~/.config/environment.d/60-hoshineko-portal.conf`
+  （`GTK_USE_PORTAL=1`，重新登录生效），并对当前会话尝试
+  `systemctl --user set-environment` / `dbus-update-activation-environment`；
+  卸载只删除安装时新建的文件。
+- **另一成因**：反复安装触发 systemd `start-limit-hit`，portal 单元进入
+  failed 后 FileChooser 接口整体消失。安装/卸载重启前现在会先
+  `systemctl --user reset-failed xdg-desktop-portal.service`。
+
 ## v3.0.1005 — Places 分页与图标轨道
 
 - 版本号升至 `3.0.1005`；AppImage 产物名变为

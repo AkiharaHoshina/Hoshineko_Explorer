@@ -98,7 +98,8 @@
 .file-thumbnail {
     width: 40px;
     height: 40px;
-    object-fit: cover;
+    /* 保持原比例适应缩略图框（不裁切、不拉伸） */
+    object-fit: contain;
     border-radius: 4px;
     /* 缩略图延迟请求期的占位底色（src 是 1×1 透明 data URI / 队列淘汰
        占位图）：未加载时显示中性色块而非空白，加载后图片覆盖 */

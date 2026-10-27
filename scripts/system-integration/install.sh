@@ -41,6 +41,12 @@ PORTALS_CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/xdg-desktop-portal"
 PORTAL_PREF_LINE="org.freedesktop.impl.portal.FileChooser=hoshineko"
 # 记录安装时新建的用户级配置（桌面配置副本/通用文件），卸载时删除
 PORTALS_CREATED_LIST="$PORTALS_CONF_DIR/.hoshineko-portals-created"
+# GTK 门户开关：GTK 应用（LocalSend、各类 Flutter/GTK 程序）默认自绘
+# GTK 对话框，完全不经过 xdg-desktop-portal；GTK_USE_PORTAL=1 才会走
+# portal → 本后端。写入 environment.d，注销重登后生效。
+ENV_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/environment.d"
+ENV_CONF="$ENV_DIR/60-hoshineko-portal.conf"
+ENV_CREATED_LIST="$ENV_DIR/.hoshineko-created"
 # 固定安装路径（可经环境变量覆盖：测试沙箱 / 定制安装）
 SYSTEM_BIN="${HOSHINEKO_SYSTEM_BIN:-/usr/local/bin/HoshinekoFM}"
 USER_BIN="${HOSHINEKO_USER_BIN:-$HOME/.local/bin/HoshinekoFM}"
@@ -328,6 +334,39 @@ root_install() {
   echo "[root] portal 配置与 D-Bus 激活文件已安装"
 }
 
+# 让 GTK 应用走门户：GTK 的 GtkFileChooserNative 只有在 GTK_USE_PORTAL=1
+# （或沙箱内）时才请求 xdg-desktop-portal，否则直接弹自己的对话框。
+# LocalSend（file_selector_linux）、大量 GTK/Flutter 程序都属于后者。
+# 写入 ~/.config/environment.d（新登录生效）；已存在则不动。
+install_gtk_portal_env() {
+  if [ -f "$ENV_CONF" ]; then
+    echo "[user] $ENV_CONF 已存在，跳过"
+    return
+  fi
+  mkdir -p "$ENV_DIR"
+  {
+    printf '# Hoshineko：让 GTK 应用通过 xdg-desktop-portal 选择文件\n'
+    printf '# 由 Hoshineko 系统集成一键安装创建，卸载时自动删除\n'
+    printf 'GTK_USE_PORTAL=1\n'
+  } > "$ENV_CONF"
+  printf '%s\n' "$ENV_CONF" >> "$ENV_CREATED_LIST"
+  echo "[user] $ENV_CONF 已写入 GTK_USE_PORTAL=1（重新登录后生效）"
+}
+
+# 当前会话尽量即时生效：systemd 用户管理器 + D-Bus 激活环境。
+# 仅在安装到真实家目录时执行——e2e 沙箱 HOME 下不污染开发者会话。
+apply_gtk_portal_env_now() {
+  local real_home
+  real_home="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)"
+  [ -n "$real_home" ] && [ "$HOME" = "$real_home" ] || return 0
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user set-environment GTK_USE_PORTAL=1 2>/dev/null || true
+  fi
+  if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+    dbus-update-activation-environment GTK_USE_PORTAL=1 2>/dev/null || true
+  fi
+}
+
 user_install() {
   # 用户级固定副本：防原始 AppImage 被移动/删除后默认打开失效（幂等：内容一致则跳过）。
   # 复制源：APPIMAGE 优先；应用从已删除的副本运行时回退到 root 级刚安装的固定路径。
@@ -367,6 +406,10 @@ user_install() {
     echo "[user] ${conf} 已写入 preferred=hoshineko"
   done < <(install_portals_conf_targets)
 
+  # GTK 应用默认绕过门户，必须显式开启 GTK_USE_PORTAL
+  install_gtk_portal_env
+  apply_gtk_portal_env_now
+
   # 桌面入口 + mime 关联（与设置「设为默认」同效果，幂等）
   if command -v xdg-mime >/dev/null 2>&1; then
     xdg-mime default HoshinekoFM.desktop inode/directory >/dev/null 2>&1 || true
@@ -378,6 +421,10 @@ user_install() {
   # 阻塞式 restart 会永久挂起，导致安装流程永不返回、应用侧按钮一直
   # 忙碌禁用；timeout 作双保险。
   if command -v systemctl >/dev/null 2>&1; then
+    # 先清 failed 计数：反复安装/重启会触发 systemd start-limit-hit，
+    # 之后任何 start 都被拒绝，portal 直接不可用（FileChooser 消失，
+    # 所有应用回落到自带对话框）——这是"装了却不生效"的真实成因之一。
+    timeout 20 systemctl --user reset-failed xdg-desktop-portal.service 2>/dev/null || true
     timeout 20 systemctl --user --no-block restart xdg-desktop-portal.service 2>/dev/null || true
     echo "[user] xdg-desktop-portal 服务已重启"
   fi

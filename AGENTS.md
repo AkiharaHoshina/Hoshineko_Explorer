@@ -247,7 +247,11 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
 - **INI 写入用 awk 定点插入**：`[preferred]` 组内替换/追加，不能 `>>` 盲加（会写进上一组或制造重复组）；卸载只删本应用的键，文件只剩空行/`[preferred]` 时删除（空文件会继续遮蔽系统配置）。
 - **`.portal` 不写 `UseIn`**：它不是桌面专属实现，需要在所有桌面可被选中；`UseIn` 只接受桌面名（niri/GNOME），曾误写接口名 `org.freedesktop.impl.portal.FileChooser`。
 - **状态检测**：`system:get-system-integration-status` 的 `portalsConf` 必须扫描通用文件 + 所有 `<desktop>-portals.conf`，只看 `portals.conf` 会在修复后误报未安装。
-- 改这里跑 e2e 18（含桌面专属、系统级副本、卸载清理场景）。脚本里读桌面列表必须 `printf '%s\n'`——无换行时 `read` 在 EOF 返回非零，`while` 循环体不会执行（本轮真实 bug）。
+- 改这里跑 e2e 18（含桌面专属、系统级副本、卸载清理场景）。
+- **GTK 应用默认不走门户**：`GtkFileChooserNative` 只在 `GTK_USE_PORTAL=1`（或沙箱）时才调 `FileChooser`，LocalSend（file_selector_linux）、大量 Flutter/GTK 程序因此看不到 Hoshineko。一键安装写 `~/.config/environment.d/60-hoshineko-portal.conf`（卸载时只删自己新建的），并对真实家目录执行 `systemctl --user set-environment` + `dbus-update-activation-environment`（e2e 沙箱 HOME 下跳过，避免污染开发者会话）。新登录后生效。
+- **重启前必须 `reset-failed`**：反复安装/重启 xdg-desktop-portal 会命中 systemd `start-limit-hit`，单元进入 failed，`org.freedesktop.portal.FileChooser` 整个从宿主 portal 消失，所有应用回落自带对话框。install/uninstall 的重启前均有 `systemctl --user reset-failed`；排查时先看 `systemctl --user is-active xdg-desktop-portal`。
+- 诊断口诀：`gdbus introspect` 看不到 FileChooser → 宿主 portal 或选路有问题；能看到但应用仍弹 GTK 对话框 → 应用没走门户（`GTK_USE_PORTAL`）。
+脚本里读桌面列表必须 `printf '%s\n'`——无换行时 `read` 在 EOF 返回非零，`while` 循环体不会执行（本轮真实 bug）。
 
 ## Places 分页与图标轨道（v3.0.1005 起）
 

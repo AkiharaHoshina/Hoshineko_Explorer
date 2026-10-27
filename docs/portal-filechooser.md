@@ -50,6 +50,45 @@ Hoshineko 的内置文件选择器可作为 **xdg-desktop-portal 的 FileChooser
 - **启动检查**：应用启动时读取该文件并与当前版本比对——不一致弹 `PortalVersionDialog`（每次会话一次、取消不记忆每次启动弹）：打包版**取消 / 一键重装**（`system:reinstall-system-integration` 跑 `scripts/system-integration/reinstall.sh`——source install.sh/uninstall.sh 复用函数，卸载 + 安装合并为**单次 pkexec 授权**，完成后提示重启应用）；开发版仅取消 + portal 运行时诊断详情（打包版弹窗内按 PgDn 查看同一份详情）。
 - **不弹的场景**：portal 未安装；版本号文件缺失（旧流程残留/不完整安装——曾有用户部分安装后误弹）。
 
+## 为什么有些应用仍然弹自己的 GTK 对话框（v3.0.1006 起）
+
+**门户只对"走门户的应用"生效。** 直接链接 GTK3/GTK4 的普通程序（LocalSend、
+大量 Flutter/GTK 程序）用 `GtkFileChooserNative`，它**只有在 `GTK_USE_PORTAL=1`
+或应用处于 Flatpak 等沙箱时才请求 xdg-desktop-portal**，否则直接弹自己的对话框，
+根本不经过门户——此时改 `portals.conf` 不会有任何效果。
+
+一键安装会写入 `~/.config/environment.d/60-hoshineko-portal.conf`
+（`GTK_USE_PORTAL=1`），并尝试对当前 systemd 用户管理器 / D-Bus 激活环境立即生效：
+
+```bash
+# 已安装后手动立即验证（不改全局）
+GTK_USE_PORTAL=1 localsend_app
+
+# 让会话内所有 GTK 应用生效：注销重新登录（environment.d 在新会话读取）
+```
+
+卸载时只有"安装时新建"的这个文件会被删除；用户自建的同名配置保持不动。
+
+Electron 应用同理：Electron 的打开对话框走 GTK（或 Ozone），需要同样的
+`GTK_USE_PORTAL=1`；已经以自身方式打开文件的应用不受影响。
+
+## 安装后门户不可用：systemd start-limit-hit（v3.0.1006 起）
+
+反复安装/重装会在短时间内多次 `systemctl --user restart xdg-desktop-portal`，
+命中 systemd 的启动频率限制后，portal 单元进入 `failed`（日志 `start-limit-hit`），
+之后任何尝试都不会把它拉起来——现象就是**所有应用都回落到自带对话框、
+`org.freedesktop.portal.FileChooser` 接口整个消失**（`gdbus introspect` 看不到）。
+
+安装/卸载脚本现在会在重启前执行 `systemctl --user reset-failed
+xdg-desktop-portal.service`。手动恢复：
+
+```bash
+systemctl --user reset-failed xdg-desktop-portal.service
+systemctl --user restart xdg-desktop-portal.service
+gdbus introspect --session --dest org.freedesktop.portal.Desktop \
+  --object-path /org/freedesktop/portal/desktop | grep FileChooser
+```
+
 ## 安装
 
 1. **一键安装（推荐）**：设置 → 行为 →「系统集成」→「安装 Portal 集成」（经 pkexec 授权）——自动完成下述全部步骤、写入版本号文件并重启 portal 服务；或直接运行 `scripts/system-integration/install.sh`。

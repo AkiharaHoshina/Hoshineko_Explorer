@@ -190,7 +190,8 @@ function FileIconDisplay({
           style={{
             width: `${iconSize}px`,
             height: `${iconSize}px`,
-            objectFit: "cover",
+            // 保持原图宽高比，在缩略图框内留白而不是裁切/拉伸
+            objectFit: "contain",
           }}
         />
       )}

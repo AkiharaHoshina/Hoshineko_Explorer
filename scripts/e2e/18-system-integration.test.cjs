@@ -76,6 +76,14 @@ const path = require('path');
       '沙箱环境应跳过真实 kill',
     );
 
+    // GTK 应用走门户：安装写入 environment.d 的 GTK_USE_PORTAL=1
+    const envConf = path.join(fakeHome, '.config', 'environment.d', '60-hoshineko-portal.conf');
+    h.assert.ok(fs.existsSync(envConf), '应写入 environment.d/60-hoshineko-portal.conf');
+    h.assert.ok(
+      /^GTK_USE_PORTAL=1$/m.test(fs.readFileSync(envConf, 'utf-8')),
+      'environment.d 应包含 GTK_USE_PORTAL=1',
+    );
+
     // 幂等：二次运行不重复追加
     const r2 = run(scriptPath);
     h.assert.strictEqual(r2.status, 0);
@@ -86,6 +94,7 @@ const path = require('path');
     const u1 = run(uninstallPath);
     h.assert.strictEqual(u1.status, 0, `卸载应成功：${u1.stderr}`);
     h.assert.strictEqual(fs.existsSync(confPath), false, 'portals.conf 无剩余内容应删除');
+    h.assert.strictEqual(fs.existsSync(envConf), false, '卸载应删除安装时新建的 environment.d 配置');
     h.assert.ok(
       u1.stdout.includes('[user] 清理 portal/FileManager1 常驻进程'),
       '卸载应执行常驻进程清理路径',
