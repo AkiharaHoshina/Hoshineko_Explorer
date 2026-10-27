@@ -3,7 +3,8 @@
  * - 状态 IPC 返回完整字段；
  * - 脚本可执行、--user-only 幂等（沙箱 HOME + 临时 packaging 目录，
  *   不触碰真实 /usr 与用户真实 portals.conf）；
- * - 用户级输出：portals.conf preferred 项写入 / 卸载时移除。
+ * - 用户级输出：portals.conf preferred 项写入 / 卸载时移除；
+ * - 桌面专属 `<desktop>-portals.conf` 优先于通用文件（niri 场景）。
  * root 级（pkexec）不在 e2e 内执行（需交互授权）。
  */
 const h = require('./harness.cjs');
@@ -48,9 +49,15 @@ const path = require('path');
     // --user-only 幂等运行：沙箱 HOME + 临时 packaging 目录
     const fakeHome = h.tempDir('hoshineko-e2e-home-');
     const fakePkg = h.tempDir('hoshineko-e2e-pkg-');
-    const run = (script) =>
+    const run = (script, extraEnv = {}) =>
       spawnSync(script, ['--user-only'], {
-        env: { ...process.env, HOME: fakeHome, HOSHINEKO_PACKAGING_DIR: fakePkg },
+        env: {
+          ...process.env,
+          HOME: fakeHome,
+          XDG_CURRENT_DESKTOP: 'niri',
+          HOSHINEKO_PACKAGING_DIR: fakePkg,
+          ...extraEnv,
+        },
         encoding: 'utf-8',
       });
 
@@ -99,6 +106,99 @@ const path = require('path');
     const conf3 = fs.readFileSync(confPath, 'utf-8');
     h.assert.ok(!conf3.includes('hoshineko'), 'hoshineko 项应移除');
     h.assert.ok(conf3.includes('OpenURI=gtk'), '其他 portal 项应保留');
+
+    // 桌面专属配置优先：niri-portals.conf 存在时安装必须改它，
+    // 否则只写通用 portals.conf 会被 xdg-desktop-portal 忽略。
+    const desktopConf = path.join(fakeHome, '.config', 'xdg-desktop-portal', 'niri-portals.conf');
+    fs.writeFileSync(desktopConf, '[preferred]\ndefault=gtk\n');
+    const r4 = run(scriptPath);
+    h.assert.strictEqual(r4.status, 0, `桌面配置场景安装应成功：${r4.stderr}`);
+    const desktopInstalled = fs.readFileSync(desktopConf, 'utf-8');
+    h.assert.ok(
+      desktopInstalled.includes('org.freedesktop.impl.portal.FileChooser=hoshineko'),
+      'niri-portals.conf 应写入 preferred 项',
+    );
+    h.assert.ok(desktopInstalled.includes('default=gtk'), '桌面配置原有键应保留');
+    h.assert.strictEqual(
+      (desktopInstalled.match(/FileChooser=hoshineko/g) || []).length,
+      1,
+      '桌面配置 preferred 项不应重复',
+    );
+    const u4 = run(uninstallPath);
+    h.assert.strictEqual(u4.status, 0);
+    const desktopUninstalled = fs.readFileSync(desktopConf, 'utf-8');
+    h.assert.ok(!desktopUninstalled.includes('hoshineko'), '卸载应移除桌面配置中的 preferred 项');
+    h.assert.ok(desktopUninstalled.includes('default=gtk'), '卸载应保留桌面配置其他键');
+    h.assert.ok(fs.existsSync(desktopConf), '有剩余内容的桌面配置不应删除');
+
+    // 只有系统级桌面配置（用户级不存在）：应生成用户级副本并写入，
+    // 否则系统 `<desktop>-portals.conf` 会遮蔽通用 portals.conf。
+    const freshHome = h.tempDir('hoshineko-e2e-fresh-home-');
+    const fakeData = h.tempDir('hoshineko-e2e-data-');
+    const systemDeskDir = path.join(fakeData, 'xdg-desktop-portal');
+    fs.mkdirSync(systemDeskDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(systemDeskDir, 'niri-portals.conf'),
+      '[preferred]\ndefault=testdesk;gtk;\n',
+    );
+    const freshEnv = {
+      HOME: freshHome,
+      XDG_DATA_DIRS: fakeData,
+      XDG_CONFIG_DIRS: path.join(fakeData, 'no-user-config'),
+    };
+    const r5 = run(scriptPath, freshEnv);
+    h.assert.strictEqual(r5.status, 0, `系统级桌面配置场景安装应成功：${r5.stderr}`);
+    const freshDesktopConf = path.join(
+      freshHome, '.config', 'xdg-desktop-portal', 'niri-portals.conf',
+    );
+    h.assert.ok(fs.existsSync(freshDesktopConf), '应生成用户级 niri-portals.conf');
+    const freshDesktopContent = fs.readFileSync(freshDesktopConf, 'utf-8');
+    h.assert.ok(
+      freshDesktopContent.includes('org.freedesktop.impl.portal.FileChooser=hoshineko'),
+      '生成的桌面配置应写入 preferred 项',
+    );
+    h.assert.ok(freshDesktopContent.includes('default=testdesk'), '应保留系统桌面配置默认值');
+    const createdList = path.join(
+      freshHome, '.config', 'xdg-desktop-portal', '.hoshineko-portals-created',
+    );
+    h.assert.ok(fs.existsSync(createdList), '应记录新建配置用于卸载');
+
+    const u5 = run(uninstallPath, freshEnv);
+    h.assert.strictEqual(u5.status, 0);
+    h.assert.strictEqual(
+      fs.existsSync(freshDesktopConf), false,
+      '卸载应删除安装时新建的桌面配置副本',
+    );
+    h.assert.strictEqual(fs.existsSync(createdList), false, '卸载应删除新建配置清单');
+
+    // 重装脚本同时 source install/uninstall：两者同名函数不得互相覆盖。
+    // 仅系统级桌面配置时，reinstall 的安装阶段也必须生成用户级副本。
+    const reinstallPath = path.join(h.ROOT, 'scripts', 'system-integration', 'reinstall.sh');
+    const reinstallHome = h.tempDir('hoshineko-e2e-reinstall-home-');
+    const r6 = spawnSync(reinstallPath, ['--user-only'], {
+      env: {
+        ...process.env,
+        HOME: reinstallHome,
+        XDG_CURRENT_DESKTOP: 'niri',
+        XDG_DATA_DIRS: fakeData,
+        XDG_CONFIG_DIRS: path.join(fakeData, 'no-user-config'),
+        HOSHINEKO_PACKAGING_DIR: fakePkg,
+        HOSHINEKO_SKIP_SERVICE_KILL: '1',
+      },
+      encoding: 'utf-8',
+    });
+    h.assert.strictEqual(r6.status, 0, `重装应成功：${r6.stderr}`);
+    const reinstallDesktopConf = path.join(
+      reinstallHome, '.config', 'xdg-desktop-portal', 'niri-portals.conf',
+    );
+    h.assert.ok(
+      fs.existsSync(reinstallDesktopConf),
+      '重装应生成用户级 niri-portals.conf（source 函数不得被卸载版覆盖）',
+    );
+    h.assert.ok(
+      fs.readFileSync(reinstallDesktopConf, 'utf-8').includes('FileChooser=hoshineko'),
+      '重装生成的桌面配置应包含 preferred 项',
+    );
 
     // 未触碰真实 /usr（root 级未执行）
     h.assert.strictEqual(r1.stdout.includes('[root]'), false, '--user-only 不应执行 root 级');

@@ -80,12 +80,27 @@ Hoshineko 的内置文件选择器可作为 **xdg-desktop-portal 的 FileChooser
    #   Exec=/usr/local/bin/HoshinekoFM --portal
    ```
 
-   3. **preferred 项**（确保本后端压过 gtk.portal）：
+   3. **preferred 项**（确保本后端压过 gtk/gnome 等其他实现）：
+
+   xdg-desktop-portal 对 `XDG_CURRENT_DESKTOP` 里的每个桌面名（小写）**优先读取**
+   `~/.config/xdg-desktop-portal/<desktop>-portals.conf`，找到后不再读通用的
+   `portals.conf`。niri/GNOME/KDE 等环境通常已有系统级桌面配置，所以只写
+   `portals.conf` 会被完全忽略。正确做法（以 niri 为例）：
 
    ```bash
    mkdir -p ~/.config/xdg-desktop-portal
-   printf '[preferred]\norg.freedesktop.impl.portal.FileChooser=hoshineko\n' >> ~/.config/xdg-desktop-portal/portals.conf
+   # 在 niri-portals.conf 的 [preferred] 组内加入下面一行（保留原文件内容）
+   # org.freedesktop.impl.portal.FileChooser=hoshineko
    ```
+
+   一键安装会按同样规则处理：写入当前桌面实际生效的配置（用户级不存在
+   时从系统级复制生成副本）、通用 `portals.conf`，以及所有已存在的用户
+   级 `<desktop>-portals.conf`；新建的副本记录在
+   `~/.config/xdg-desktop-portal/.hoshineko-portals-created`，卸载时整份删除。
+
+   `hoshineko.portal` **不要写 `UseIn`**：它不是桌面专属实现，需要在所有桌面
+   都可被 `portals.conf` 选中；`UseIn` 只能填桌面名（niri/GNOME/KDE），
+   填接口名会导致实现不参与当前桌面的选择。
 
 4. 验证（应用运行中）：
 
@@ -116,7 +131,8 @@ Hoshineko 的内置文件选择器可作为 **xdg-desktop-portal 的 FileChooser
    # 一键安装写入的应用副本（确认是自己安装的 AppImage 再删）：
    # sudo rm -f /usr/local/bin/HoshinekoFM
    # rm -f ~/.local/bin/HoshinekoFM
-   # 移除 portals.conf 中的 preferred=hoshineko 行（无剩余内容时删除整个文件）
+   # 移除通用 portals.conf 与所有 <desktop>-portals.conf 中的 preferred=hoshineko 行
+   #（安装时新建的配置副本按 .hoshineko-portals-created 清单整份删除）
    systemctl --user restart xdg-desktop-portal.service
    ```
 

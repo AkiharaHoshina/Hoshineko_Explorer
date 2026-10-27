@@ -1366,9 +1366,10 @@ export function registerSystemHandlers(
   });
 
   /**
-   * 系统集成状态检测：portal 配置、两个 D-Bus 激活文件与 portals.conf
-   * 是否存在（设置内显示安装状态）。portalsConf 为内容检测：文件里
-   * 是否包含 preferred=hoshineko 项（仅存在文件不算已配置）。
+   * 系统集成状态检测：portal 配置、两个 D-Bus 激活文件与 portals 配置
+   * 是否存在（设置内显示安装状态）。portalsConf 为内容检测：通用
+   * portals.conf 或任一 `<desktop>-portals.conf` 含 preferred=hoshineko
+   * （桌面专属配置优先于通用文件，只看 portals.conf 会误报未安装）。
    */
   const getIntegrationStatus = async (): Promise<{
     portalConfig: boolean;
@@ -1385,13 +1386,28 @@ export function registerSystemHandlers(
       }
     };
     const home = os.homedir();
-    let portalsConf: boolean;
+    const configDir = path.join(
+      process.env.XDG_CONFIG_HOME || path.join(home, '.config'),
+      'xdg-desktop-portal',
+    );
+    let portalsConf = false;
     try {
-      const content = await fs.readFile(
-        path.join(home, '.config', 'xdg-desktop-portal', 'portals.conf'),
-        'utf-8',
-      );
-      portalsConf = content.includes('org.freedesktop.impl.portal.FileChooser=hoshineko');
+      const entries = await fs.readdir(configDir);
+      const candidates = new Set([
+        'portals.conf',
+        ...entries.filter((name) => name.endsWith('-portals.conf')),
+      ]);
+      for (const name of candidates) {
+        try {
+          const content = await fs.readFile(path.join(configDir, name), 'utf-8');
+          if (content.includes('org.freedesktop.impl.portal.FileChooser=hoshineko')) {
+            portalsConf = true;
+            break;
+          }
+        } catch {
+          // 单个文件不可读不影响其他候选项
+        }
+      }
     } catch {
       portalsConf = false;
     }

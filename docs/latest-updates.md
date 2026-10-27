@@ -1,5 +1,23 @@
 # 更新日志
 
+## v3.0.1004 — Portal 选路修复
+
+- 版本号升至 `3.0.1004`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1004.AppImage` / `HoshinekoFM-3.0.1004-size.AppImage`。
+- **根因**：xdg-desktop-portal 在 `XDG_CURRENT_DESKTOP` 下优先读取
+  `~/.config/xdg-desktop-portal/<desktop>-portals.conf`，找到后不再读
+  通用 `portals.conf`。安装脚本只写后者，niri/GNOME/KDE 等带系统桌面
+  配置的环境里 `preferred=hoshineko` 从未生效，请求落到 GNOME/GTK
+  后端。
+- **修复**：`hoshineko.portal` 删除非法 `UseIn`（原值是接口名，不是
+  桌面名）；`install.sh` 按 xdg 的查找顺序确定实际生效配置，用户级
+  不存在而系统级存在时生成用户级副本并保留 `default=...` 等键；
+  同时写入通用配置和已存在的其他桌面配置。新建文件登记到
+  `.hoshineko-portals-created`，卸载时整份删除。
+- **状态检测**：设置页的 `portalsConf` 改为扫描通用文件 + 所有
+  `<desktop>-portals.conf`，避免修复后仍显示未安装。
+- e2e 18 增加桌面专属配置与“仅系统级配置”场景。
+
 ## v3.0.1003 — Chrome 风格标签页
 
 - 版本号升至 `3.0.1003`。

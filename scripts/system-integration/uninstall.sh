@@ -29,7 +29,10 @@ set -euo pipefail
 
 PORTALS_DIR="${HOSHINEKO_PORTALS_DIR:-/usr/share/xdg-desktop-portal/portals}"
 SERVICES_DIR="/usr/share/dbus-1/services"
-PORTALS_CONF="$HOME/.config/xdg-desktop-portal/portals.conf"
+PORTALS_CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/xdg-desktop-portal"
+PORTAL_PREF_LINE="org.freedesktop.impl.portal.FileChooser=hoshineko"
+# 安装时新建的用户级配置清单（桌面配置副本/通用文件）：卸载时整份删除
+PORTALS_CREATED_LIST="$PORTALS_CONF_DIR/.hoshineko-portals-created"
 # 固定安装路径（可经环境变量覆盖：测试沙箱 / 定制安装，与 install.sh 一致）
 SYSTEM_BIN="${HOSHINEKO_SYSTEM_BIN:-/usr/local/bin/HoshinekoFM}"
 USER_BIN="${HOSHINEKO_USER_BIN:-$HOME/.local/bin/HoshinekoFM}"
@@ -59,6 +62,37 @@ set_desktop_exec() {
   awk '{ if (substr($0, 1, 5) == "Exec=") print "Exec=" ENVIRON["HOSHINEKO_DESKTOP_EXEC"] " %U"; else print }' \
     "$file" > "$file.tmp" && mv "$file.tmp" "$file"
   unset HOSHINEKO_DESKTOP_EXEC
+}
+
+# 用户级 portals 配置集合（与 install.sh 同款）：通用 portals.conf +
+# 所有已存在的桌面专属 `<desktop>-portals.conf`。桌面专属文件优先于
+# 通用文件，安装时写入了哪些，卸载就清理哪些。
+uninstall_portals_conf_targets() {
+  local f
+  {
+    printf '%s\n' "$PORTALS_CONF_DIR/portals.conf"
+    for f in "$PORTALS_CONF_DIR"/*-portals.conf; do
+      [ -f "$f" ] || continue
+      printf '%s\n' "$f"
+    done
+  } | awk '!seen[$0]++'
+}
+
+# 从指定配置移除 preferred 项。文件移除后若只剩空行/[preferred] 组，
+# 删除文件——空文件会继续遮蔽系统级桌面配置，导致其他 portal 失效。
+remove_portal_preference() {
+  local file="$1" rest
+  [ -f "$file" ] || return 0
+  grep -q -F "$PORTAL_PREF_LINE" "$file" || return 0
+  grep -v -F "$PORTAL_PREF_LINE" "$file" > "$file.tmp"
+  mv "$file.tmp" "$file"
+  rest="$(grep -v -e '^[[:space:]]*$' -e '^\[preferred\][[:space:]]*$' "$file" || true)"
+  if [ -z "$rest" ]; then
+    rm -f "$file"
+    echo "[user] ${file} 已无剩余内容，已删除"
+  else
+    echo "[user] ${file} 已移除 preferred=hoshineko"
+  fi
 }
 
 # 会话总线名（与 packaging/dbus 激活文件的 Name 一致）：busctl 按名
@@ -214,24 +248,29 @@ user_uninstall() {
     echo "[user] $USER_BIN 已移除"
   fi
 
-  if [ -f "$PORTALS_CONF" ]; then
-    if grep -q "org.freedesktop.impl.portal.FileChooser=hoshineko" "$PORTALS_CONF"; then
-      # 移除 preferred 行；剩余内容为空（或仅空行/空 section）时删除整个文件
-      grep -v -F "org.freedesktop.impl.portal.FileChooser=hoshineko" "$PORTALS_CONF" \
-        > "$PORTALS_CONF.tmp"
-      mv "$PORTALS_CONF.tmp" "$PORTALS_CONF"
-      rest="$(grep -v -e '^[[:space:]]*$' -e '^\[preferred\][[:space:]]*$' "$PORTALS_CONF" || true)"
-      if [ -z "$rest" ]; then
-        rm -f "$PORTALS_CONF"
-        echo "[user] portals.conf 已无剩余内容，已删除"
-      else
-        echo "[user] portals.conf 已移除 preferred=hoshineko"
-      fi
-    else
-      echo "[user] portals.conf 无 hoshineko 项，跳过"
+  # 清理通用与所有桌面专属用户配置（安装时可能写入了多份）
+  local removed_any=""
+  while IFS= read -r conf; do
+    [ -n "$conf" ] || continue
+    if [ -f "$conf" ] && grep -q -F "$PORTAL_PREF_LINE" "$conf"; then
+      remove_portal_preference "$conf"
+      removed_any="1"
     fi
-  else
-    echo "[user] portals.conf 不存在，跳过"
+  done < <(uninstall_portals_conf_targets)
+  if [ -z "$removed_any" ]; then
+    echo "[user] portals 配置无 hoshineko 项，跳过"
+  fi
+
+  # 安装时新建的配置副本：整份删除，恢复系统级配置的读取
+  if [ -f "$PORTALS_CREATED_LIST" ]; then
+    while IFS= read -r created; do
+      [ -n "$created" ] || continue
+      if [ -f "$created" ]; then
+        rm -f "$created"
+        echo "[user] ${created} 已删除（安装时新建）"
+      fi
+    done < "$PORTALS_CREATED_LIST"
+    rm -f "$PORTALS_CREATED_LIST"
   fi
 
   # 重启 portal 服务（配置移除生效）。--no-block：systemctl 只入队立即

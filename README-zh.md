@@ -185,14 +185,16 @@ sudo install -m 644 packaging/dbus/org.freedesktop.FileManager1.service /usr/sha
 
 ### 文件对话框经 xdg-desktop-portal（外部程序）
 
-HoshinekoFM 可作为 `org.freedesktop.impl.portal.FileChooser` 后端——GTK/Qt 应用的「打开」对话框由内置选择器响应。最简方式：设置 → 行为 →「系统集成」→「安装 Portal 集成」一键完成（经 pkexec 授权），自动安装 portal 配置、两个 D-Bus 激活文件、版本号文件（`hoshineko.version`）、写入 preferred 项（portals.conf）并重启 portal 服务。也可手动执行：
+HoshinekoFM 可作为 `org.freedesktop.impl.portal.FileChooser` 后端——GTK/Qt 应用的「打开」对话框由内置选择器响应。最简方式：设置 → 行为 →「系统集成」→「安装 Portal 集成」一键完成（经 pkexec 授权），自动安装 portal 配置、两个 D-Bus 激活文件、版本号文件（`hoshineko.version`）、写入实际生效的 preferred 项（优先当前桌面 `<desktop>-portals.conf`，其次通用 portals.conf）并重启 portal 服务。也可手动执行：
 
 ```bash
 sudo install -m 644 packaging/portals/hoshineko.portal /usr/share/xdg-desktop-portal/portals/
 sudo install -m 644 packaging/dbus/org.freedesktop.impl.portal.desktop.hoshineko.service /usr/share/dbus-1/services/
 sudo install -m 644 packaging/dbus/org.freedesktop.FileManager1.service /usr/share/dbus-1/services/
-mkdir -p ~/.config/xdg-desktop-portal
-printf '[preferred]\norg.freedesktop.impl.portal.FileChooser=hoshineko\n' >> ~/.config/xdg-desktop-portal/portals.conf
+# 重要：xdg-desktop-portal 优先读 <desktop>-portals.conf，只写 portals.conf 会被系统桌面配置遮蔽
+# 在 ~/.config/xdg-desktop-portal/<desktop>-portals.conf 的 [preferred] 组加入：
+#   org.freedesktop.impl.portal.FileChooser=hoshineko
+# 例如 niri：~/.config/xdg-desktop-portal/niri-portals.conf
 systemctl --user restart xdg-desktop-portal.service
 ```
 

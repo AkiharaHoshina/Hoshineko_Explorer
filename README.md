@@ -178,14 +178,17 @@ sudo install -m 644 packaging/dbus/org.freedesktop.FileManager1.service /usr/sha
 
 ### File Dialogs via xdg-desktop-portal (External Programs)
 
-HoshinekoFM can serve as the `org.freedesktop.impl.portal.FileChooser` backend—the "Open" dialog of GTK/Qt applications is handled by the built-in picker. Simplest method: Settings → Behavior → "System Integration" → "Install Portal Integration" completes in one click (authorized via pkexec), automatically installing the portal config, two D-Bus activation files, a version file (`hoshineko.version`), writing the preferred entry (portals.conf), and restarting the portal service. You can also execute it manually:
+HoshinekoFM can serve as the `org.freedesktop.impl.portal.FileChooser` backend—the "Open" dialog of GTK/Qt applications is handled by the built-in picker. Simplest method: Settings → Behavior → "System Integration" → "Install Portal Integration" completes in one click (authorized via pkexec), automatically installing the portal config, two D-Bus activation files, a version file (`hoshineko.version`), writing the preferred entry to the config that actually applies (the desktop-specific `<desktop>-portals.conf` first, then the generic `portals.conf`), and restarting the portal service. You can also execute it manually:
 
 ```bash
 sudo install -m 644 packaging/portals/hoshineko.portal /usr/share/xdg-desktop-portal/portals/
 sudo install -m 644 packaging/dbus/org.freedesktop.impl.portal.desktop.hoshineko.service /usr/share/dbus-1/services/
 sudo install -m 644 packaging/dbus/org.freedesktop.FileManager1.service /usr/share/dbus-1/services/
-mkdir -p ~/.config/xdg-desktop-portal
-printf '[preferred]\norg.freedesktop.impl.portal.FileChooser=hoshineko\n' >> ~/.config/xdg-desktop-portal/portals.conf
+# Important: xdg-desktop-portal prefers <desktop>-portals.conf; writing only
+# portals.conf is ignored when a system desktop config exists.
+# Add to [preferred] in ~/.config/xdg-desktop-portal/<desktop>-portals.conf:
+#   org.freedesktop.impl.portal.FileChooser=hoshineko
+# e.g. ~/.config/xdg-desktop-portal/niri-portals.conf
 systemctl --user restart xdg-desktop-portal.service
 ```
 

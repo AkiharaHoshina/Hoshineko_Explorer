@@ -37,7 +37,10 @@ PKG_DIR="${HOSHINEKO_PACKAGING_DIR:?需要 HOSHINEKO_PACKAGING_DIR（packaging �
 
 PORTALS_DIR="${HOSHINEKO_PORTALS_DIR:-/usr/share/xdg-desktop-portal/portals}"
 SERVICES_DIR="/usr/share/dbus-1/services"
-PORTALS_CONF="$HOME/.config/xdg-desktop-portal/portals.conf"
+PORTALS_CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/xdg-desktop-portal"
+PORTAL_PREF_LINE="org.freedesktop.impl.portal.FileChooser=hoshineko"
+# 记录安装时新建的用户级配置（桌面配置副本/通用文件），卸载时删除
+PORTALS_CREATED_LIST="$PORTALS_CONF_DIR/.hoshineko-portals-created"
 # 固定安装路径（可经环境变量覆盖：测试沙箱 / 定制安装）
 SYSTEM_BIN="${HOSHINEKO_SYSTEM_BIN:-/usr/local/bin/HoshinekoFM}"
 USER_BIN="${HOSHINEKO_USER_BIN:-$HOME/.local/bin/HoshinekoFM}"
@@ -69,6 +72,117 @@ set_desktop_exec() {
   awk '{ if (substr($0, 1, 5) == "Exec=") print "Exec=" ENVIRON["HOSHINEKO_DESKTOP_EXEC"] " %U"; else print }' \
     "$file" > "$file.tmp" && mv "$file.tmp" "$file"
   unset HOSHINEKO_DESKTOP_EXEC
+}
+
+# 在系统配置搜索路径中查找 `<desktop>-portals.conf`（不含用户级）。
+# 路径顺序与 xdg-desktop-portal 一致：XDG_CONFIG_DIRS → /etc →
+# XDG_DATA_HOME → XDG_DATA_DIRS → /usr/share。找到第一个即返回。
+find_system_portals_conf() {
+  local base="$1" dir file
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    file="$dir/xdg-desktop-portal/$base"
+    if [ -f "$file" ]; then
+      printf '%s\n' "$file"
+      return
+    fi
+  done < <(
+    printf '%s\n' \
+      "${XDG_CONFIG_DIRS:-/etc/xdg}" \
+      /etc \
+      "${XDG_DATA_HOME:-$HOME/.local/share}" \
+      "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" \
+      /usr/share | tr ':' '\n'
+  )
+}
+
+# 需要写入 preferred 项的用户级配置集合（去重）：
+# - 当前 XDG_CURRENT_DESKTOP 每个桌面名：用户级文件存在则改它；
+#   不存在但系统级存在则生成用户级副本（否则系统桌面配置会遮蔽通用
+#   portals.conf，preferred 永远不生效）；
+# - 通用 portals.conf（没有桌面专属配置的环境兜底）；
+# - 已存在的其他 `<desktop>-portals.conf`（多桌面用户切换会话后仍生效）。
+install_portals_conf_targets() {
+  local name lower target system_conf f
+  {
+    while IFS= read -r name; do
+      [ -n "$name" ] || continue
+      lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
+      target="$PORTALS_CONF_DIR/$lower-portals.conf"
+      if [ -f "$target" ]; then
+        printf '%s\n' "$target"
+      else
+        system_conf="$(find_system_portals_conf "$lower-portals.conf")"
+        [ -n "$system_conf" ] && printf '%s\n' "$target"
+      fi
+    done < <(printf '%s\n' "${XDG_CURRENT_DESKTOP:-}" | tr ':' '\n')
+    printf '%s\n' "$PORTALS_CONF_DIR/portals.conf"
+    for f in "$PORTALS_CONF_DIR"/*-portals.conf; do
+      [ -f "$f" ] || continue
+      printf '%s\n' "$f"
+    done
+  } | awk '!seen[$0]++'
+}
+
+# 确保用户级配置存在：桌面专属配置从系统副本复制（保留 default=...
+# 等其他键）；通用文件新建空 [preferred]。新建时登记到 created 列表，
+# 卸载时整份删除以恢复系统行为。
+ensure_portals_conf_file() {
+  local file="$1" base system_conf
+  [ -f "$file" ] && return 0
+  mkdir -p "$(dirname "$file")"
+  base="$(basename "$file")"
+  if [ "$base" != "portals.conf" ]; then
+    system_conf="$(find_system_portals_conf "$base")"
+    if [ -n "$system_conf" ]; then
+      cp "$system_conf" "$file"
+    fi
+  fi
+  if [ ! -f "$file" ]; then
+    printf '[preferred]\n' > "$file"
+  fi
+  mkdir -p "$(dirname "$PORTALS_CREATED_LIST")"
+  grep -qxF "$file" "$PORTALS_CREATED_LIST" 2>/dev/null || printf '%s\n' "$file" >> "$PORTALS_CREATED_LIST"
+}
+
+# 在指定 portals.conf 的 [preferred] 组写入/替换 preferred=hoshineko。
+# 保留文件原有内容（default=... 等其他键），已有同名键只改值、不重复；
+# 没有 [preferred] 组则在末尾追加。不能用 `>>` 盲目追加——会把键写进
+# 上一个分组或制造重复分组。
+set_portal_preference() {
+  local file="$1" tmp
+  mkdir -p "$(dirname "$file")"
+  if [ ! -f "$file" ]; then
+    printf '[preferred]\n%s\n' "$PORTAL_PREF_LINE" > "$file"
+    return
+  fi
+  tmp="$(mktemp "${file}.XXXXXX")"
+  PORTAL_PREF_LINE="$PORTAL_PREF_LINE" awk '
+    BEGIN { in_pref = 0; done = 0 }
+    /^[[:space:]]*\[/ {
+      if (in_pref && !done) { print ENVIRON["PORTAL_PREF_LINE"]; done = 1 }
+      section = $0
+      sub(/^[[:space:]]*\[/, "", section)
+      sub(/\][[:space:]]*$/, "", section)
+      in_pref = (section == "preferred")
+      print
+      next
+    }
+    in_pref && $0 ~ /^[[:space:]]*org\.freedesktop\.impl\.portal\.FileChooser[[:space:]]*=/ {
+      if (!done) { print ENVIRON["PORTAL_PREF_LINE"]; done = 1 }
+      next
+    }
+    { print }
+    END {
+      if (!done) {
+        if (!in_pref) print "[preferred]"
+        print ENVIRON["PORTAL_PREF_LINE"]
+      }
+    }
+  ' "$file" > "$tmp"
+  # 用 cat 覆盖而不是 mv：保留原文件的属主/权限
+  cat "$tmp" > "$file"
+  rm -f "$tmp"
 }
 
 # 会话总线名（与 packaging/dbus 激活文件的 Name 一致）：busctl 按名
@@ -243,14 +357,15 @@ user_install() {
     fi
   fi
 
-  mkdir -p "$(dirname "$PORTALS_CONF")"
-  # 幂等追加 preferred 项（gtk.portal 同样匹配 FileChooser 时显式优先本后端）
-  if [ -f "$PORTALS_CONF" ] && grep -q "org.freedesktop.impl.portal.FileChooser=hoshineko" "$PORTALS_CONF"; then
-    echo "[user] portals.conf 已配置"
-  else
-    printf '[preferred]\norg.freedesktop.impl.portal.FileChooser=hoshineko\n' >> "$PORTALS_CONF"
-    echo "[user] portals.conf 已写入 preferred=hoshineko"
-  fi
+  # 写入所有用户级候选配置（当前桌面实际生效文件 + 通用文件 + 其他已存在
+  # 的桌面配置）。桌面专属配置优先于通用 portals.conf，只写后者在 niri/
+  # GNOME/KDE 等带桌面配置的环境里会被完全忽略。
+  while IFS= read -r conf; do
+    [ -n "$conf" ] || continue
+    ensure_portals_conf_file "$conf"
+    set_portal_preference "$conf"
+    echo "[user] ${conf} 已写入 preferred=hoshineko"
+  done < <(install_portals_conf_targets)
 
   # 桌面入口 + mime 关联（与设置「设为默认」同效果，幂等）
   if command -v xdg-mime >/dev/null 2>&1; then

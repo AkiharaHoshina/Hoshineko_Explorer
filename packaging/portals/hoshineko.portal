@@ -6,5 +6,7 @@
 # 详细说明见 docs/portal-filechooser.md
 [portal]
 DBusName=org.freedesktop.impl.portal.desktop.hoshineko
-Interfaces=org.freedesktop.impl.portal.FileChooser
-UseIn=org.freedesktop.impl.portal.FileChooser
+Interfaces=org.freedesktop.impl.portal.FileChooser;
+# 不写 UseIn：本后端不是某个桌面专属实现，需要在所有桌面环境
+# （niri / GNOME / KDE …）都可被 portals.conf 选中。
+# UseIn 只能填桌面环境名（如 niri、GNOME），不是接口名。

@@ -240,6 +240,15 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
 - e2e 注意：标签相关用例多为真实坐标点击，本机 1280×800（缩放 2）下
   `84d` 等用例可能失败；用 DOM `.click()` 复现可区分环境问题与代码回归。
 
+## Portal 选路（v3.0.1004 起）
+
+- **桌面专属配置优先**：xdg-desktop-portal 对 `XDG_CURRENT_DESKTOP` 每个桌面名（小写）先读 `~/.config/xdg-desktop-portal/<desktop>-portals.conf`，找到后**不再读通用 `portals.conf`**（`man portals.conf`）。niri/GNOME/KDE 通常提供系统级 `<desktop>-portals.conf`，所以安装脚本只写通用文件会让 `preferred=hoshineko` 完全失效——用户看到 GNOME/GTK 选择器。
+- **安装必须生成用户级副本**：若用户级桌面配置不存在但系统级存在，`install.sh` 复制系统文件到用户级再插入 preferred 项（保留 `default=...` 等键）；新建文件记入 `~/.config/xdg-desktop-portal/.hoshineko-portals-created`，卸载时整份删除。只更新用户级已存在的 `*-portals.conf` 不够。
+- **INI 写入用 awk 定点插入**：`[preferred]` 组内替换/追加，不能 `>>` 盲加（会写进上一组或制造重复组）；卸载只删本应用的键，文件只剩空行/`[preferred]` 时删除（空文件会继续遮蔽系统配置）。
+- **`.portal` 不写 `UseIn`**：它不是桌面专属实现，需要在所有桌面可被选中；`UseIn` 只接受桌面名（niri/GNOME），曾误写接口名 `org.freedesktop.impl.portal.FileChooser`。
+- **状态检测**：`system:get-system-integration-status` 的 `portalsConf` 必须扫描通用文件 + 所有 `<desktop>-portals.conf`，只看 `portals.conf` 会在修复后误报未安装。
+- 改这里跑 e2e 18（含桌面专属、系统级副本、卸载清理场景）。脚本里读桌面列表必须 `printf '%s\n'`——无换行时 `read` 在 EOF 返回非零，`while` 循环体不会执行（本轮真实 bug）。
+
 ## 注意事项
 
 一定要写jsdoc！写字段说明！！！写i18n！！

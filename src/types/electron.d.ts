@@ -434,8 +434,9 @@ export interface IElectronAPI {
     clearDirMimeHandler: () => Promise<{ success: boolean; changed?: boolean; error?: string }>;
     /**
      * 一键安装系统集成（幂等脚本）：root 级经 pkexec（portal 配置 +
-     * D-Bus 激活文件），用户级写 portals.conf preferred 项 + 重启 portal
-     * 服务。userOnly=true 仅执行用户级（无 polkit 环境降级）。
+     * D-Bus 激活文件），用户级写实际生效的 portal 配置 preferred 项
+     * （桌面专属 `<desktop>-portals.conf` 优先，其次通用 portals.conf）
+     * + 重启 portal 服务。userOnly=true 仅执行用户级。
      * 错误码：NO_SCRIPT / SCRIPT_FAILED。
      */
     installSystemIntegration: (userOnly?: boolean) => Promise<{
@@ -446,8 +447,8 @@ export interface IElectronAPI {
     }>;
     /**
      * 一键卸载系统集成（幂等脚本，安装的逆操作）：root 级经 pkexec
-     * 移除 portal 配置 + D-Bus 激活文件，用户级移除 portals.conf
-     * preferred 项 + 重启 portal 服务。错误码同安装。
+     * 移除 portal 配置 + D-Bus 激活文件，用户级从通用/桌面专属配置
+     * 移除 preferred 项（新建副本整份删除）+ 重启 portal 服务。错误码同安装。
      */
     uninstallSystemIntegration: (userOnly?: boolean) => Promise<{
       success: boolean;
@@ -473,7 +474,8 @@ export interface IElectronAPI {
     getPortalRuntimeInfo: () => Promise<PortalRuntimeInfo>;
     /**
      * 系统集成安装状态（各文件存在性；portalsConf 为内容检测：
-     * portals.conf 是否含 preferred=hoshineko 项）
+     * 通用 portals.conf 或任一 `<desktop>-portals.conf` 是否含
+     * preferred=hoshineko 项）
      */
     getSystemIntegrationStatus: () => Promise<{
       portalConfig: boolean;
