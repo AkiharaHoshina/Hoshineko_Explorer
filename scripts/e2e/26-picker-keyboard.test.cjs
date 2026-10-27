@@ -113,21 +113,35 @@ const path = require('path');
     await h.sleep(300);
     z = await zoneOf();
     h.assert.strictEqual(z.value, 'sidebar', `files 后 Tab 应到 sidebar，实际 ${z.value}`);
-    const sbFocus = await h.js(picker, `document.activeElement?.matches('.sidebar-item, .sidebar-partition') ?? false`);
-    h.assert.ok(sbFocus.value, '侧边栏分区焦点应落在条目上');
-    await h.key(picker, 'Tab');
-    await h.sleep(300);
-    z = await zoneOf();
-    h.assert.strictEqual(z.value, 'topbar-omnibar', `sidebar 后 Tab 应到地址栏内，实际 ${z.value}`);
+    // 选择器同样有折叠按钮：进站先落头部按钮，再 Tab 才到条目
+    const sbFocus = await h.js(picker, `document.activeElement?.matches('.sidebar-item, .sidebar-partition, .sidebar-header-btn') ?? false`);
+    h.assert.ok(sbFocus.value, '侧边栏分区焦点应落在条目或头部按钮上');
+    h.assert.ok(
+      (await h.js(picker, `!!document.querySelector('.sidebar-collapse-btn')`)).value,
+      '选择器侧边栏应有收起/展开按钮',
+    );
+    // 走完侧边栏内部的所有停靠点（头部按钮 → 条目）
+    let zz = 'sidebar';
+    for (let i = 0; i < 6; i++) {
+      await h.key(picker, 'Tab');
+      await h.sleep(200);
+      zz = (await zoneOf()).value;
+      if (zz !== 'sidebar') break;
+    }
+    h.assert.strictEqual(zz, 'topbar-omnibar', `sidebar 后 Tab 应到地址栏内，实际 ${zz}`);
     // Shift+Tab 反向回 sidebar
     await h.key(picker, 'Tab', ['shift']);
     await h.sleep(300);
     z = await zoneOf();
     h.assert.strictEqual(z.value, 'sidebar', 'Shift+Tab 应反向回 sidebar');
-    await h.key(picker, 'Tab');
-    await h.sleep(300);
-    z = await zoneOf();
-    h.assert.strictEqual(z.value, 'topbar-omnibar', '重新 Tab 应到地址栏内');
+    zz = 'sidebar';
+    for (let i = 0; i < 6; i++) {
+      await h.key(picker, 'Tab');
+      await h.sleep(200);
+      zz = (await zoneOf()).value;
+      if (zz !== 'sidebar') break;
+    }
+    h.assert.strictEqual(zz, 'topbar-omnibar', '重新 Tab 应到地址栏内');
     await h.key(picker, 'Tab');
     await h.sleep(300);
     z = await zoneOf();

@@ -680,6 +680,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         stopEdgeFlip();
         return;
       }
+      // 「添加固定」只接受单个文件夹：文件/多选拖到这里不提示、不接受
+      // （不 preventDefault → 浏览器不派发 drop，也没有高亮）
+      if (target === TARGET_PIN) {
+        const ds0 = getDragState();
+        const ok = !!ds0 && ds0.files.length === 1
+          && ds0.files[0].isDirectory && !ds0.files[0].trashOriginalPath;
+        if (!ok) {
+          setDragOverTarget(null);
+          stopEdgeFlip();
+          return;
+        }
+      }
       // 接受放置：drop 事件才会派发
       e.preventDefault();
       e.dataTransfer!.dropEffect = e.shiftKey ? "copy" : "move";
@@ -726,6 +738,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       if (!dragState || dragState.files.length === 0) return;
       const target = resolveTargetAt(e.clientX, e.clientY);
       if (!target) return;
+      if (target === TARGET_PIN) {
+        const ok = dragState.files.length === 1
+          && dragState.files[0].isDirectory && !dragState.files[0].trashOriginalPath;
+        // 文件拖到「添加固定」：不反应、不接受
+        if (!ok) return;
+      }
 
       e.preventDefault();
       e.stopPropagation();
@@ -1707,27 +1725,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
       }}
     >
       <div className="sidebar-header">
-        {!isPicker && (
-          <IconButton
-            variant="standard"
-            className="sidebar-header-btn sidebar-collapse-btn"
-            title={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
-            ariaLabel={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
-            onClick={() => setCollapsed((prev) => !prev)}
-          >
-            <Icon name="menu" />
-          </IconButton>
-        )}
+        <button
+          type="button"
+          className="sidebar-header-btn sidebar-collapse-btn"
+          title={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+          aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+          onClick={() => setCollapsed((prev) => !prev)}
+        >
+          <Icon name="menu" />
+        </button>
         {!isPicker && showTerminalPlace && (
-          <IconButton
-            variant="standard"
+          <button
+            type="button"
             className={`sidebar-header-btn sidebar-terminal-btn${terminalOpen ? " sidebar-header-btn--active" : ""}`}
             title={t("settings.cat_terminal")}
-            ariaLabel={t("settings.cat_terminal")}
+            aria-label={t("settings.cat_terminal")}
             onClick={() => onToggleTerminal?.()}
           >
             <Icon name="terminal" filled={terminalOpen} />
-          </IconButton>
+          </button>
         )}
         {showDots && (
           <nav className="sidebar-dots" aria-label={t("sidebar.pages")}>
@@ -1740,7 +1756,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 aria-current={i === currentPage ? "true" : undefined}
                 tabIndex={-1}
                 onClick={() => setPageIndex(i)}
-              />
+              >
+                {/* 视觉圆点：粗略区域悬停 → 放大一档；精确悬停圆点 →
+                    再放大一档（用户定案的两级悬停反馈） */}
+                <span className="sidebar-dot-core" aria-hidden="true" />
+              </button>
             ))}
           </nav>
         )}

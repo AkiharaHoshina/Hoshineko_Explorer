@@ -264,7 +264,10 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
 ## Places 收起态滚动与焦点框（v3.0.1007 起）
 
 - 收起态不分页：`pages` 恒为 `[fixedNodes]`，`.sidebar--collapsed .sidebar-body` 恢复 `overflow-y:auto`（细滚动条）。窗口太矮时滚轮/触控板上下/触摸拖动/键盘焦点跟随都能滚动；滚轮翻页与触摸翻页在收起态直接返回。
-- 头部按钮（折叠/终端）焦点框改为内嵌 `outline-offset:-2px`——40px 行高下外扩的环会被容器裁掉（「Tab 选框显示不全」的根因）。
+- 头部按钮（折叠/终端）是**原生 `<button>`**，不是 `md-icon-button`：Material 的焦点环画在 shadow 内部按钮上（40px 盒外），左右会被裁切；原生按钮用 `.sidebar-header-btn:focus-visible { outline-offset:-2px }` 内嵌绘制。改这里不要换回 md 组件。
+- 圆点切换器：按钮命中区 18×20、视觉圆点 6px 是子元素 `.sidebar-dot-core`。**单级悬停**：进入命中区即放大到 2.2×（当前页 2.6×），离开复原。
+- 拖放高亮语义：**文件/文件夹拖到普通落点 → 实心边框**（移动/复制）；**文件夹拖到「固定文件夹」→ 虚线边框**（固定用）；**文件拖到「固定文件夹」→ 不高亮、不接受**（dragover 不 preventDefault，drop 不派发）；**固定项排序插入占位 → 虚线**。
+- 选择器/保存器侧边栏也有折叠按钮（`isPicker` 只隐藏终端按钮）；焦点进站先落头部按钮，再进条目。
 
 ## 设置分类：导航合并（v3.0.1007 起）
 

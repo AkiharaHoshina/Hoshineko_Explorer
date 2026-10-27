@@ -62,6 +62,25 @@
 
 .sidebar-header-btn {
     flex-shrink: 0;
+    /* 原生按钮：焦点框完全由本样式控制（md-icon-button 的焦点环在
+       shadow 内、40px 盒外绘制，左右会被裁切） */
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--md-sys-color-on-surface-variant);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-header-btn:hover {
+    background-color: var(--md-sys-color-surface-container-highest);
+    color: var(--md-sys-color-on-surface);
 }
 
 /* 终端开启态：与 Places 内建终端入口同款弱高亮 */
@@ -75,32 +94,50 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
+    gap: 0;
     flex: 1;
     min-width: 0;
     overflow: hidden;
     padding-right: 2px;
 }
 
+/* 圆点按钮：命中区域 18×20（视觉圆点仅 6px，直接点太小）。
+   单级悬停：鼠标进入按钮区域即整体放大视觉圆点。 */
 .sidebar-dot {
-    width: 6px;
-    height: 6px;
+    position: relative;
+    width: 18px;
+    height: 20px;
     padding: 0;
     border: none;
-    border-radius: 50%;
-    background: var(--md-sys-color-outline-variant);
+    background: transparent;
     cursor: pointer;
     flex-shrink: 0;
-    transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
-.sidebar-dot:hover {
+.sidebar-dot-core {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--md-sys-color-outline-variant);
+    transform: translate(-50%, -50%) scale(1);
+    transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.sidebar-dot:hover .sidebar-dot-core {
     background: var(--md-sys-color-outline);
+    transform: translate(-50%, -50%) scale(2.2);
 }
 
-.sidebar-dot.active {
+.sidebar-dot.active .sidebar-dot-core {
     background: var(--md-sys-color-primary);
-    transform: scale(1.4);
+    transform: translate(-50%, -50%) scale(1.4);
+}
+
+.sidebar-dot.active:hover .sidebar-dot-core {
+    transform: translate(-50%, -50%) scale(2.6);
 }
 
 /* 分页容器：高度由 flex 决定，ResizeObserver 据此计算每页容量 */
@@ -267,11 +304,18 @@
     color: var(--md-sys-color-on-surface);
 }
 
-/* 同窗口拖放悬停高亮（落点提示） */
+/* 同窗口拖放悬停高亮（落点提示）：
+   文件落点（移动/复制）用实心边框；固定落点（添加固定/排序占位）用
+   虚线边框——两者语义不同，用户凭边框样式即可区分。 */
 .sidebar-item.drag-over {
-    outline: 2px dashed var(--md-sys-color-primary);
+    outline: 2px solid var(--md-sys-color-primary);
     outline-offset: -2px;
     background-color: var(--md-sys-color-surface-container-high);
+}
+
+/* 添加固定按钮：固定语义 → 虚线（放在实线规则之后覆盖） */
+.sidebar-add-pin.drag-over {
+    outline: 2px dashed var(--md-sys-color-primary);
 }
 
 .sidebar-item:active {

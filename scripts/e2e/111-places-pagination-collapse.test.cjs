@@ -176,6 +176,45 @@ const h = require('./harness.cjs');
     );
     h.assert.strictEqual(afterV.value, beforeV.value, '触控板垂直滚动不应翻页');
 
+    // ── 圆点悬停放大（单级：进入命中区即放大） ──
+    const dotCount = (await h.js(win, `document.querySelectorAll('.sidebar-dot').length`)).value;
+    if (dotCount > 1) {
+      const dotIdx = dotCount - 1; // 非当前页的圆点（初始停在第 1 页）
+      const c = await h.elementCenter(win, '.sidebar-dot', dotIdx);
+      const zf = win.webContents.getZoomFactor();
+      const move = async (x, y) => {
+        await win.webContents.sendInputEvent({
+          type: 'mouseMove', x: Math.round(x * zf), y: Math.round(y * zf),
+        });
+        await h.sleep(250);
+      };
+      const coreScale = async () => (await h.js(
+        win,
+        `(() => {
+          const d = document.querySelectorAll('.sidebar-dot')[${dotIdx}];
+          const t = getComputedStyle(d.querySelector('.sidebar-dot-core')).transform;
+          return new DOMMatrix(t).a;
+        })()`,
+      )).value;
+
+      const hit = await h.js(win, `(() => {
+        const r = document.querySelectorAll('.sidebar-dot')[${dotIdx}].getBoundingClientRect();
+        return { w: r.width, h: r.height };
+      })()`);
+      h.assert.ok(hit.value.w >= 18 && hit.value.h >= 18,
+        `圆点命中区域应明显大于视觉圆点（实际 ${hit.value.w}×${hit.value.h}）`);
+
+      // 命中区边缘（远离圆点圆心）也应放大
+      await move(c.x + 7, c.y);
+      const hovered = await coreScale();
+      h.assert.ok(hovered > 2 && hovered < 2.5,
+        `命中区内悬停应放大（实际 ${hovered}）`);
+
+      await move(600, 700);
+      const off = await coreScale();
+      h.assert.ok(Math.abs(off - 1) < 0.05, `鼠标离开后应复原（实际 ${off}）`);
+    }
+
     // ── 触摸横向滑动翻页（Pointer Events，跟手位移后松手翻页） ──
     await h.js(win, `document.querySelectorAll('.sidebar-dot')[0].click(); true`);
     await h.sleep(400);
