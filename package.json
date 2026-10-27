@@ -1,12 +1,12 @@
 {
   "name": "hoshineko-fm",
   "private": true,
-  "version": "3.0.1009",
+  "version": "3.0.1010",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && tsc -p electron/tsconfig.json",
+    "build": "tsc -b && vite build && tsc -p electron/tsconfig.json && node scripts/build-portal-bridge.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "postinstall": "node scripts/remove-usocket.cjs",

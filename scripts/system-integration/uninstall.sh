@@ -43,6 +43,9 @@ SERVICES_CREATED_LIST="$USER_SERVICES_DIR/.hoshineko-created"
 # 固定安装路径（可经环境变量覆盖：测试沙箱 / 定制安装，与 install.sh 一致）
 SYSTEM_BIN="${HOSHINEKO_SYSTEM_BIN:-/usr/local/bin/HoshinekoFM}"
 USER_BIN="${HOSHINEKO_USER_BIN:-$HOME/.local/bin/HoshinekoFM}"
+# portal 名字持有桥（与 install.sh 一致）：包装脚本 + 打包的桥 JS
+PORTAL_BRIDGE_BIN="${HOSHINEKO_BRIDGE_BIN:-/usr/local/bin/hoshineko-portal-bridge}"
+PORTAL_BRIDGE_JS="${HOSHINEKO_BRIDGE_JS:-/usr/share/hoshineko/portal-bridge.cjs}"
 DESKTOP_FILE="$HOME/.local/share/applications/HoshinekoFM.desktop"
 
 # AppImage 魔数校验（偏移 8 起为 "AI"）：只移除本安装脚本写入的 AppImage 副本
@@ -107,6 +110,8 @@ remove_portal_preference() {
 # 非标准路径启动的旧常驻也能命中（cmdline 匹配兜底只覆盖「路径含
 # HoshinekoFM」的进程）。
 PORTAL_BUS_NAME="org.freedesktop.impl.portal.desktop.hoshineko"
+# 桥持有的对外名字由 PORTAL_BUS_NAME 表示；选择器后端退到内部名字
+PORTAL_PICKER_BUS_NAME="org.hoshineko.portal.picker"
 FM1_BUS_NAME="org.freedesktop.FileManager1"
 
 # 解析会话总线名拥有者 PID。busctl 缺失/会话总线不可用/名字无主 → 输出空。
@@ -122,12 +127,13 @@ bus_owner_pid() {
     || true
 }
 
-# 判断 PID 是否本应用服务模式常驻（cmdline 含 --portal / --filemanager1）。
+# 判断 PID 是否本应用服务模式常驻（cmdline 含 --portal / --portal-service /
+# --filemanager1，或桥脚本 portal-bridge.cjs）。
 # 总线名拥有者可能是正在运行的 GUI（无服务参数）——杀 GUI 会丢未落盘
 # 数据（卸载脚本由 GUI 调用，杀 GUI 等于自杀），只能警告提示重启应用。
 is_service_resident() {
   [ -r "/proc/$1/cmdline" ] || return 1
-  tr '\0' ' ' < "/proc/$1/cmdline" | grep -Eq -- '--(portal|filemanager1)'
+  tr '\0' ' ' < "/proc/$1/cmdline" | grep -Eq -- '--(portal-service|portal|filemanager1)|portal-bridge\.js'
 }
 
 # 进程是否已死亡（含僵尸）：僵尸对 kill -0 恒为「存活」、SIGKILL 亦无效
@@ -181,7 +187,7 @@ kill_stale_services() {
   fi
   if command -v busctl >/dev/null 2>&1; then
     local bus_name pid
-    for bus_name in "$PORTAL_BUS_NAME" "$FM1_BUS_NAME"; do
+    for bus_name in "$PORTAL_BUS_NAME" "$PORTAL_PICKER_BUS_NAME" "$FM1_BUS_NAME"; do
       pid="$(bus_owner_pid "$bus_name")"
       [ -n "$pid" ] || continue
       if ! is_service_resident "$pid"; then
@@ -194,7 +200,7 @@ kill_stale_services() {
   fi
   if command -v pkill >/dev/null 2>&1; then
     local pattern i
-    for pattern in 'HoshinekoFM.*--portal' 'HoshinekoFM.*--filemanager1'; do
+    for pattern in 'portal-bridge\.js' 'HoshinekoFM.*--portal-service' 'HoshinekoFM.*--portal' 'HoshinekoFM.*--filemanager1'; do
       pkill -TERM -f "$pattern" 2>/dev/null || true
       i=0
       while pgrep -f "$pattern" >/dev/null 2>&1 && [ "$i" -lt 5 ]; do
@@ -212,6 +218,13 @@ root_uninstall() {
   rm -f "$PORTALS_DIR/hoshineko.portal"
   rm -f "$PORTALS_DIR/hoshineko.version"
   rm -f "$SERVICES_DIR/org.freedesktop.impl.portal.desktop.hoshineko.service"
+  rm -f "$SERVICES_DIR/org.hoshineko.portal.picker.service"
+  # portal 名字持有桥（包装脚本 + 桥 JS）：仅移除本安装脚本写入的形态
+  if [ -f "$PORTAL_BRIDGE_BIN" ] && grep -q 'portal-bridge.cjs' "$PORTAL_BRIDGE_BIN"; then
+    rm -f "$PORTAL_BRIDGE_BIN"
+    echo "[root] $PORTAL_BRIDGE_BIN 已移除"
+  fi
+  rm -f "$PORTAL_BRIDGE_JS"
   # FileManager1 是通用总线名，仅当内容属于本应用（Exec 指向 HoshinekoFM）才移除
   if [ -f "$SERVICES_DIR/org.freedesktop.FileManager1.service" ] \
     && grep -q -i 'HoshinekoFM' "$SERVICES_DIR/org.freedesktop.FileManager1.service"; then

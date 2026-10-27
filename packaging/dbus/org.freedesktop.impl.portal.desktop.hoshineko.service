@@ -1,6 +1,16 @@
-# D-Bus 服务激活文件（可选，安装到 /usr/share/dbus-1/services/）
-# 应用未运行时，portal 按总线名激活本服务；Exec 以 --portal 参数启动
-# （仅注册后端、不创建主窗口）。Exec 路径按实际安装位置调整。
+# D-Bus 服务激活文件（安装到 /usr/share/dbus-1/services/）
+#
+# 应用未运行时，portal 按总线名激活本服务。Exec 指向 **hoshineko-portal-bridge**
+# ——一个不启动 Chromium 的纯 Node 桥（ELECTRON_RUN_AS_NODE=1），由它持有
+# org.freedesktop.impl.portal.desktop.hoshineko 并把调用转发给真正的选择器后端
+# （org.hoshineko.portal.picker，见同目录另一个 .service）。
+#
+# 为什么不让 Exec 直接指向 `HoshinekoFM --portal`：Electron 启动时 Chromium 会
+# 同步查询宿主 xdg-desktop-portal 的 Settings（明暗），而宿主启动时又在等本
+# 实现者持有总线名——三方互等 25 秒，FileChooser 接口被宿主丢弃且不再重建。
+# 桥进程不启动 Chromium，名字毫秒级到手，环不存在。
+#
+# Exec 中的安装路径由 install.sh 统一改写为固定安装路径。
 [D-BUS Service]
 Name=org.freedesktop.impl.portal.desktop.hoshineko
-Exec=/usr/bin/HoshinekoFM --portal
+Exec=/usr/local/bin/hoshineko-portal-bridge

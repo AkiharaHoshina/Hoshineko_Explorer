@@ -1,5 +1,28 @@
 # 更新日志
 
+## v3.0.1010 — Portal 名字持有桥（根治冷激活卡死）
+
+- 版本号升至 `3.0.1010`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1010.AppImage` / `HoshinekoFM-3.0.1010-size.AppImage`。
+- **根因**（实测）：宿主 portal 冷激活 `--portal` 进程时，Electron 启动期的
+  Chromium 会**同步**查询门户 Settings（明暗），而宿主又在等本进程持有
+  FileChooser 实现者名字——三方互等 25 秒（GLib 默认 D-Bus 调用超时），
+  随后 xdg-desktop-portal 丢弃 FileChooser 接口且**不再重建**，本次会话内
+  所有应用的文件对话框失效。最小 Electron 主进程实测：JS 143ms 启动、
+  `READY` 25328ms；期间 `dbus-next` 的连接与 `requestName` 回包全部冻结，
+  所以「提前到 ready 之前注册」并不能解环（v3.0.1009 的方案只对门户已在线
+  的情形有效）。
+- **修复**：新增 `hoshineko-portal-bridge`——由 `.service` 以
+  `ELECTRON_RUN_AS_NODE=1` 运行的纯 Node 桥（不启动 Chromium）持有对外总线名
+  `org.freedesktop.impl.portal.desktop.hoshineko`，真正的选择器后端退到内部
+  名字 `org.hoshineko.portal.picker`（`--portal-service`），桥把
+  OpenFile/SaveFile/SaveFiles 原样转发。桥 60ms 抢到名字，实测门户重启后
+  FileChooser **9ms** 就绪。
+- 桥空闲 60 秒（无在途请求）自行退出并释放名字，下次调用由 D-Bus 按需再
+  激活；安装/卸载脚本会一并清理旧常驻（含 `portal-bridge.cjs`）。
+- 桥为单文件构建产物（esbuild 打包，含 `dbus-next`），运行不依赖系统 node
+  或 node_modules。
+
 ## v3.0.1009 — 修复安装导致 Portal 完全失效（SIGBUS）
 
 - 版本号升至 `3.0.1009`；AppImage 产物名变为

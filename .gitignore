@@ -36,3 +36,6 @@ src-pkg/
 
 devlog/
 native/build/
+
+# portal 名字持有桥的构建产物（npm run build 生成，随 AppImage 分发）
+packaging/portal/

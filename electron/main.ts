@@ -14,6 +14,7 @@ import { registerWindowHandlers } from './handlers/window';
 import { registerThemeHandlers, startColorSchemeWatcher, stopColorSchemeWatcher } from './handlers/theme';
 import { registerPickerHandlers, type PickerConfig, type PinnedDirEntry, type PickerViewPrefs, type PickerThemeSnapshot, type PickerSettings } from './handlers/picker';
 import { registerServiceBackends } from './backends';
+import { PORTAL_INTERNAL_BUS_NAME } from './portalNames';
 import { ensureLauncherEntry, removeLauncherEntry, getLauncherEntryExists, type LauncherEntryEnv, type LauncherEntryKind } from './launcherEntry';
 import { initJobHandlers } from './jobs';
 
@@ -593,12 +594,19 @@ if (DEBUG_LOG) {
   }, 250);
 }
 
-/** --portal 启动参数：仅注册 portal 后端服务（D-Bus 激活用，不创建主窗口） */
+/** --portal 启动参数：仅注册 portal 后端服务（D-Bus 激活用，不创建主窗口）。
+ *  注意：生产环境的对外名字由 hoshineko-portal-bridge（纯 Node 桥，
+ *  见 electron/portalBridge.ts）持有——本参数保留给 e2e 与手工诊断，
+ *  直接持对外名字在冷激活时会被 Chromium 启动期的门户查询卡 25 秒。 */
 const PORTAL_ONLY_MODE = process.argv.includes('--portal');
+/** --portal-service 启动参数：选择器后端（持有**内部**总线名
+ *  `PORTAL_INTERNAL_BUS_NAME`，由桥进程转发调用；同样不创建主窗口） */
+const PORTAL_SERVICE_MODE = process.argv.includes('--portal-service');
 /** --filemanager1 启动参数：仅注册 FileManager1 后端服务（同上） */
 const FM1_ONLY_MODE = process.argv.includes('--filemanager1');
-/** 服务模式（portal / filemanager1）：只注册 D-Bus 后端，不创建主窗口 */
-const SERVICE_ONLY_MODE = PORTAL_ONLY_MODE || FM1_ONLY_MODE;
+/** 服务模式（portal / portal-service / filemanager1）：只注册 D-Bus 后端，
+ *  不创建主窗口 */
+const SERVICE_ONLY_MODE = PORTAL_ONLY_MODE || PORTAL_SERVICE_MODE || FM1_ONLY_MODE;
 
 /**
  * CLI 子命令（一次性模式）：`hoshineko --help` / `--install-portal` /
@@ -634,7 +642,7 @@ const CLI_HELP_TEXT = `HoshinekoFM — 文件管理器
       --reinstall-portal  重装 portal 系统集成（单次 pkexec 授权），完成后退出
 
 不带选项时以图形界面启动；给定路径时在该目录打开。
-内部选项（D-Bus 服务激活，勿手动使用）: --portal / --filemanager1`;
+内部选项（D-Bus 服务激活，勿手动使用）: --portal / --portal-service / --filemanager1`;
 
 /**
  * 执行 CLI 子命令并返回进程退出码（0 成功 / 1 失败）。
@@ -943,6 +951,10 @@ ipcMain.handle('app:set-picker-settings', async (_event, input: unknown) => {
  *  harness 同一条 backends.ts 接线） */
 const registerBackends = () =>
   registerServiceBackends({
+    // 生产环境（--portal-service）只持内部名字：对外名字由不启动 Chromium
+    // 的桥进程持有，否则冷激活时 Chromium 启动期的门户查询会把注册卡 25s
+    // （见 AGENTS.md「启动期环」）。--portal 保持原语义供 e2e 使用。
+    portalBusName: PORTAL_SERVICE_MODE ? PORTAL_INTERNAL_BUS_NAME : undefined,
     createPicker: (config, parent) =>
       createWindow(process.argv, { picker: true, pickerConfig: config, parent }),
     openWindow: (targetPath, opts) =>
@@ -960,7 +972,9 @@ const registerBackends = () =>
  */
 const handleBackendsResult = ({ portal, fileManager1 }: { portal: boolean; fileManager1: boolean }) => {
   if (SERVICE_ONLY_MODE) {
-    const failed = (PORTAL_ONLY_MODE && !portal) || (FM1_ONLY_MODE && !fileManager1);
+    const failed =
+      ((PORTAL_ONLY_MODE || PORTAL_SERVICE_MODE) && !portal) ||
+      (FM1_ONLY_MODE && !fileManager1);
     if (failed) {
       console.error('[backend] 服务模式后端注册失败，进程退出（exit 1）');
       app.exit(1);
@@ -1063,12 +1077,15 @@ function parseRangeHeader(header: string | null, size: number): { start: number;
   return { start, end };
 }
 
-// 服务模式（--portal / --filemanager1）：**必须在 app ready 之前**注册
-// D-Bus 后端。Chromium 启动阶段会向宿主 xdg-desktop-portal 查询 Settings
-// （明暗主题），而宿主此时可能正在激活本进程——若我们等 whenReady（要等
-// Chromium 那次查询出结果）才注册，就形成环形等待，25s 后宿主放弃创建
-// FileChooser 代理，FileChooser 接口整体消失（“门户卡死/SIGBUS”现场）。
-// dbus-next 不依赖 Electron ready，这里先注册可立即解开死锁。
+// 服务模式（--portal / --portal-service / --filemanager1）：不等 ready 就注册
+// D-Bus 后端（dbus-next 不依赖 Electron ready）。
+//
+// **这不是解环方案**：实测（2026-10-28）Chromium 启动期的门户 Settings 查询
+// 会阻塞主线程，连 dbus-next 的 socket 连接与 requestName 回包都被冻结——
+// 冷激活时无论何时调用注册，25 秒内都挂不上名字。真正的解是让对外名字由
+// `hoshineko-portal-bridge`（纯 Node，不启动 Chromium）持有，本进程只持
+// 内部名字（见 portalBridge.ts / PORTAL_INTERNAL_BUS_NAME）。这里提前注册
+// 只是让后端尽早可用。
 if (SERVICE_ONLY_MODE) {
   void registerBackends().then(handleBackendsResult);
 }

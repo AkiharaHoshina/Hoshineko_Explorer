@@ -89,6 +89,45 @@ gdbus introspect --session --dest org.freedesktop.portal.Desktop \
   --object-path /org/freedesktop/portal/desktop | grep FileChooser
 ```
 
+## 冷激活卡死：为什么有 hoshineko-portal-bridge（v3.0.1010 起）
+
+**现象**：登录后或重装后，`systemctl --user status xdg-desktop-portal` 里出现
+`Failed to create file chooser proxy: 为 ...hoshineko 调用 StartServiceByName
+时出错：已到超时限制`（约 25 秒），之后 `gdbus introspect` 看不到
+`org.freedesktop.portal.FileChooser`，所有应用的文件对话框失效，直到重启
+portal。
+
+**根因**（实测）：宿主 portal 启动时要为 FileChooser 创建代理，于是
+`StartServiceByName` 激活本后端并等它持有总线名；而被激活的 Electron 进程
+启动时，Chromium 会**同步**查询同一个门户的 Settings（明暗）——两边互等，
+25 秒后由 GLib 的默认调用超时打破。更糟的是这段阻塞期间 Electron 主线程
+被占住，`dbus-next` 的 socket 连接/`requestName` 回包全部冻结，所以把注册
+提前到 `app.whenReady()` 之前**也没用**（门户已在线时不阻塞，冷激活仍卡）。
+
+**解法**：让**不启动 Chromium**的进程持有对外总线名。
+
+```
+.service (org.freedesktop.impl.portal.desktop.hoshineko)
+  └─ /usr/local/bin/hoshineko-portal-bridge     ← 60ms 抢到名字
+       └─ ELECTRON_RUN_AS_NODE=1 HoshinekoFM /usr/share/hoshineko/portal-bridge.cjs
+            └─ 转发 FileChooser 调用 →
+               org.hoshineko.portal.picker       ← Electron `--portal-service`
+                  (.service 另行激活，Chromium 卡不卡都无所谓)
+```
+
+- 桥是纯 Node（Electron 内嵌 Node，**不需要系统 node**），空闲 60 秒无在途
+  请求就退出并释放名字；下一次调用由 D-Bus 重新激活（~60ms）。
+- 桥源码 `electron/portalBridge.ts`，`npm run build` 会经
+  `scripts/build-portal-bridge.cjs` 打成 `packaging/portal/portal-bridge.cjs`，
+  install.sh 装到 `/usr/share/hoshineko/`。
+- 排查：`journalctl --user -u xdg-desktop-portal | grep StartServiceByName`
+  出现 25s 超时 → 桥没跑起来（看 `busctl --user status
+  org.freedesktop.impl.portal.desktop.hoshineko` 与
+  `ls -l /usr/local/bin/hoshineko-portal-bridge`）；`portal.FileChooser`
+  在 introspect 里但应用仍弹自带对话框 → 是 `GTK_USE_PORTAL` 那条路径的问题。
+- 注意：`HoshinekoFM --portal` 仍保留（e2e/手工诊断直接持对外名字），
+  但**不要**再把它写进 `.service`——那会退回 25 秒卡死。
+
 ## 安装
 
 1. **一键安装（推荐）**：设置 → 行为 →「系统集成」→「安装 Portal 集成」（经 pkexec 授权）——自动完成下述全部步骤、写入版本号文件并重启 portal 服务；或直接运行 `scripts/system-integration/install.sh`。

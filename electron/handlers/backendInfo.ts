@@ -1,5 +1,6 @@
 import dbus from 'dbus-next';
 import { app } from 'electron';
+import { BACKEND_VERSION_PROPERTY } from '../portalNames';
 
 /**
  * 后端总线名冲突的运行时版本探测（方案 B：运行时版本检测）。
@@ -22,8 +23,9 @@ import { app } from 'electron';
  * 悬挂的 Promise 不再落定，由事件循环丢弃；每次探测只发生一次）。
  */
 
-/** 后端对象上的版本属性名（portal FileChooser 与 FileManager1 后端共用） */
-export const BACKEND_VERSION_PROPERTY = 'Version';
+/** 后端对象上的版本属性名（portal FileChooser 与 FileManager1 后端共用）：
+ *  定义在 `electron/portalNames.ts`，桥进程（不启动 Chromium）也要用同值 */
+export { BACKEND_VERSION_PROPERTY };
 
 /** 冲突探测超时：僵尸占名连接不回复，超过此时长判为 unresponsive */
 export const BACKEND_CONFLICT_QUERY_TIMEOUT_MS = 3000;

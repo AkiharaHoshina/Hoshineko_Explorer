@@ -25,14 +25,20 @@ import { stripMnemonicLabel } from '../shared';
  * docs/portal-filechooser.md）；SaveFiles 返回 NotSupported 错误。
  */
 
-/** 总线名（与 packaging/portals/hoshineko.portal 的 DBusName 一致） */
-export const PORTAL_BUS_NAME = 'org.freedesktop.impl.portal.desktop.hoshineko';
-/** 后端对象路径（impl FileChooser 协议约定） */
-export const PORTAL_FILE_CHOOSER_PATH = '/org/freedesktop/portal/desktop';
-/** 后端接口名（impl FileChooser 协议约定） */
-export const PORTAL_FILE_CHOOSER_IFACE = 'org.freedesktop.impl.portal.FileChooser';
+// 名字/路径常量定义在 electron/portalNames.ts（桥进程与主进程共用，
+// 且该模块不 import electron——见 portalBridge.ts 的说明）
+export {
+  PORTAL_BUS_NAME,
+  PORTAL_FILE_CHOOSER_IFACE,
+  PORTAL_OBJECT_PATH as PORTAL_FILE_CHOOSER_PATH,
+} from '../portalNames';
+import {
+  PORTAL_BUS_NAME,
+  PORTAL_FILE_CHOOSER_IFACE,
+  PORTAL_OBJECT_PATH,
+} from '../portalNames';
 
-const FILE_CHOOSER_PATH = PORTAL_FILE_CHOOSER_PATH;
+const FILE_CHOOSER_PATH = PORTAL_OBJECT_PATH;
 const FILE_CHOOSER_IFACE = PORTAL_FILE_CHOOSER_IFACE;
 
 const { Interface } = dbus.interface;

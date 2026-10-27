@@ -1,0 +1,14 @@
+# D-Bus 服务激活文件（安装到 /usr/share/dbus-1/services/）
+#
+# 真正的选择器后端：持有内部总线名 org.hoshineko.portal.picker，
+# 由 hoshineko-portal-bridge 转发 FileChooser 调用（见同目录
+# org.freedesktop.impl.portal.desktop.hoshineko.service 的说明）。
+#
+# 这里用普通 Electron 进程（--portal-service）没关系：宿主 portal 等的是
+# **对外名字**，那个名字已经由桥进程持有；本进程即使被 Chromium 启动期的
+# 门户查询卡住，也不会让宿主的 StartServiceByName 超时。
+#
+# Exec 中的安装路径由 install.sh 统一改写为固定安装路径。
+[D-BUS Service]
+Name=org.hoshineko.portal.picker
+Exec=/usr/bin/HoshinekoFM --portal-service
