@@ -17,9 +17,14 @@
   Chromium 启动期向同一个宿主 portal 发出的 Settings 查询，三方互等，25 秒
   后 `Failed to create file chooser proxy`，FileChooser 接口整体消失。
   现在服务模式（`--portal` / `--filemanager1`）在 `app.whenReady()` **之前**
-  完成 D-Bus 后端注册（`dbus-next` 不依赖 Electron ready），环从结构上消失
-  ——私有会话总线实测 FileChooser 189ms 就绪。**加超时不能解决这类问题**，
-  只会把「卡死」变成「更快失败」。
+  完成 D-Bus 后端注册（`dbus-next` 不依赖 Electron ready）。**加超时不能解决
+  这类问题**，只会把「卡死」变成「更快失败」。
+- **注意（2026-10-28 实测补充）**：提前注册只在门户已在线时有效（424ms）；
+  **冷激活**仍会卡满 25 秒——Chromium 启动期那次门户查询会阻塞主线程，JS 的
+  `dbus-next` 连接/`requestName` 回包在此期间冻结（实测最小 Electron 主进程
+  `MAIN_JS_START` 143ms、`READY` 25328ms；`--portal` 进程直到超时那一刻才
+  打印注册成功）。根治需让持有 D-Bus 名的进程不启动 Chromium（详见
+  `AGENTS.md`「启动期环」）。
 
 ## v3.0.1008 — Places 交互细节
 
