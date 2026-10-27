@@ -155,6 +155,87 @@ export async function setupFileManager1(
   bus.on('error', (e) => {
     console.error(`[fm1] 会话总线连接错误（总线可能已重启，等待重新注册）：${(e as Error)?.message ?? e}`);
   });
+  class FileManager1Interface extends Interface {
+    private readonly openWindowRef: typeof openWindow;
+
+    constructor(openWindowRef: typeof openWindow) {
+      super(FM1_IFACE);
+      this.openWindowRef = openWindowRef;
+    }
+
+    /**
+     * 后端构建版本（只读属性，供总线名冲突探测使用，见 backendInfo.ts）：
+     * 注册失败时新实例经 Properties.Get 读取占名者的版本与本进程比较，
+     * 识别「旧版常驻仍在应答」的升级接管问题。其他文件管理器占名时
+     * 无此属性（调用方据此与「旧版本应用」区分）。
+     */
+    get [BACKEND_VERSION_PROPERTY](): string {
+      return app.getVersion();
+    }
+
+    /** 每个文件夹开一个窗口（URI 白名单校验） */
+    private openEach(uris: string[], opts?: FileManager1WindowOptions) {
+      for (const uri of uris) {
+        const p = uriToPath(uri);
+        if (!p) continue;
+        void this.openWindowRef(p, opts).catch((e) => {
+          console.error(`[fm1] 打开窗口失败（${p}）：${(e as Error)?.message ?? e}`);
+        });
+      }
+    }
+
+    async OpenFolders(folders: string[]) {
+      this.openEach(folders);
+    }
+
+    async ShowFolders(folders: string[], startupId: string) {
+      void startupId;
+      this.openEach(folders);
+    }
+
+    /** 打开所在目录并定位/选中条目 */
+    async ShowItems(items: string[], startupId: string) {
+      void startupId;
+      for (const uri of items) {
+        const p = uriToPath(uri);
+        if (!p) continue;
+        void this.openWindowRef(path.dirname(p), { selectFileName: path.basename(p) }).catch((e) => {
+          console.error(`[fm1] 打开窗口失败（${p}）：${(e as Error)?.message ?? e}`);
+        });
+      }
+    }
+
+    /** 打开所在目录、选中并弹出属性对话框 */
+    async ShowItemProperties(items: string[], startupId: string) {
+      void startupId;
+      for (const uri of items) {
+        const p = uriToPath(uri);
+        if (!p) continue;
+        void this.openWindowRef(path.dirname(p), {
+          selectFileName: path.basename(p),
+          openProperties: true,
+        }).catch((e) => {
+          console.error(`[fm1] 打开窗口失败（${p}）：${(e as Error)?.message ?? e}`);
+        });
+      }
+    }
+  }
+  FileManager1Interface.configureMembers({
+    properties: {
+      [BACKEND_VERSION_PROPERTY]: { signature: 's', access: 'read' },
+    },
+    methods: {
+      OpenFolders: { inSignature: 'as', outSignature: '' },
+      ShowFolders: { inSignature: 'ass', outSignature: '' },
+      ShowItems: { inSignature: 'ass', outSignature: '' },
+      ShowItemProperties: { inSignature: 'ass', outSignature: '' },
+    },
+  });
+
+  // **先导出对象、再抢名字**（顺序不能反）：dbus-daemon 在名字出现的那一刻
+  // 就投递排队中的调用，此时对象尚未 export 会让调用方拿到 UnknownMethod。
+  bus.export(FM1_PATH, new FileManager1Interface(openWindow));
+
   try {
     // RequestNameReply.PrimaryOwner = 1（按 D-Bus 规范常量比对）
     const reply = await bus.requestName(busName, dbus.NameFlag.DO_NOT_QUEUE);
@@ -200,78 +281,6 @@ export async function setupFileManager1(
     return false;
   }
 
-  class FileManager1Interface extends Interface {
-    private readonly openWindowRef: typeof openWindow;
-
-    constructor(openWindowRef: typeof openWindow) {
-      super(FM1_IFACE);
-      this.openWindowRef = openWindowRef;
-    }
-
-    /**
-     * 后端构建版本（只读属性，供总线名冲突探测使用，见 backendInfo.ts）：
-     * 注册失败时新实例经 Properties.Get 读取占名者的版本与本进程比较，
-     * 识别「旧版常驻仍在应答」的升级接管问题。其他文件管理器占名时
-     * 无此属性（调用方据此与「旧版本应用」区分）。
-     */
-    get [BACKEND_VERSION_PROPERTY](): string {
-      return app.getVersion();
-    }
-
-    /** 每个文件夹开一个窗口（URI 白名单校验） */
-    private openEach(uris: string[], opts?: FileManager1WindowOptions) {
-      for (const uri of uris) {
-        const p = uriToPath(uri);
-        if (!p) continue;
-        void this.openWindowRef(p, opts);
-      }
-    }
-
-    async OpenFolders(folders: string[]) {
-      this.openEach(folders);
-    }
-
-    async ShowFolders(folders: string[], startupId: string) {
-      void startupId;
-      this.openEach(folders);
-    }
-
-    /** 打开所在目录并定位/选中条目 */
-    async ShowItems(items: string[], startupId: string) {
-      void startupId;
-      for (const uri of items) {
-        const p = uriToPath(uri);
-        if (!p) continue;
-        void this.openWindowRef(path.dirname(p), { selectFileName: path.basename(p) });
-      }
-    }
-
-    /** 打开所在目录、选中并弹出属性对话框 */
-    async ShowItemProperties(items: string[], startupId: string) {
-      void startupId;
-      for (const uri of items) {
-        const p = uriToPath(uri);
-        if (!p) continue;
-        void this.openWindowRef(path.dirname(p), {
-          selectFileName: path.basename(p),
-          openProperties: true,
-        });
-      }
-    }
-  }
-  FileManager1Interface.configureMembers({
-    properties: {
-      [BACKEND_VERSION_PROPERTY]: { signature: 's', access: 'read' },
-    },
-    methods: {
-      OpenFolders: { inSignature: 'as', outSignature: '' },
-      ShowFolders: { inSignature: 'ass', outSignature: '' },
-      ShowItems: { inSignature: 'ass', outSignature: '' },
-      ShowItemProperties: { inSignature: 'ass', outSignature: '' },
-    },
-  });
-
-  bus.export(FM1_PATH, new FileManager1Interface(openWindow));
   console.log(`FileManager1 backend registered as ${busName}`);
   return true;
 }

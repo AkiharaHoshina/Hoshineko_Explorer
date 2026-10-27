@@ -955,14 +955,21 @@ const registerBackends = () =>
     // 的桥进程持有，否则冷激活时 Chromium 启动期的门户查询会把注册卡 25s
     // （见 AGENTS.md「启动期环」）。--portal 保持原语义供 e2e 使用。
     portalBusName: PORTAL_SERVICE_MODE ? PORTAL_INTERNAL_BUS_NAME : undefined,
-    createPicker: (config, parent) =>
-      createWindow(process.argv, { picker: true, pickerConfig: config, parent }),
-    openWindow: (targetPath, opts) =>
-      createWindow(['hoshinekofm', targetPath], {
+    // 服务模式的后端在 app ready 之前就注册（见下方说明），请求可能立刻到达。
+    // Electron 在 ready 之前 `new BrowserWindow` 会抛——表现为「首次调用窗口
+    // 不出现」（被 picker 层当成用户取消）。先等 ready 再建窗。
+    createPicker: async (config, parent) => {
+      await app.whenReady();
+      return createWindow(process.argv, { picker: true, pickerConfig: config, parent });
+    },
+    openWindow: async (targetPath, opts) => {
+      await app.whenReady();
+      return createWindow(['hoshinekofm', targetPath], {
         startupSelect: opts?.selectFileName
           ? { fileName: opts.selectFileName, openProperties: opts?.openProperties }
           : undefined,
-      }),
+      });
+    },
   });
 
 /**

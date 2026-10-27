@@ -260,7 +260,11 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
   → 只要"持有 impl 总线名的进程"是 Electron 进程，冷激活就破不了环。**已落地（v3.0.1010）**：对外名字改由 `hoshineko-portal-bridge` 持有——`.service` 的 Exec 指向 install.sh 生成的包装脚本（`ELECTRON_RUN_AS_NODE=1 <SYSTEM_BIN> /usr/share/hoshineko/portal-bridge.cjs`），桥是纯 Node、不启动 Chromium，实测 60ms 抢到名字；真正的选择器后端退到内部名字 `org.hoshineko.portal.picker`（`--portal-service`），桥把 OpenFile/SaveFile/SaveFiles 原样转发过去。实测：桥持名时 `systemctl --user restart xdg-desktop-portal` 后 FileChooser **9ms** 就绪（对比原先 25s 超时）。
 - **桥的构建与生命周期**：源码 `electron/portalBridge.ts`（纯 Node，禁止 import electron）→ `scripts/build-portal-bridge.cjs` 用 esbuild 打成 `packaging/portal/portal-bridge.cjs`（**必须是 .cjs**：仓库 package.json 是 `type: module`，.js 会被当 ESM 加载而炸掉 dbus-next 的 require；`x11` 是 dbus-next 的可选依赖，构建时标 external）。产物随 `packaging/**` 进 AppImage，install.sh 装到 `/usr/share/hoshineko/`。生命周期：dbus-daemon 按需拉起，**空闲 60s 且无在途请求**自行退出（`HOSHINEKO_BRIDGE_IDLE_MS` 可覆盖，e2e 用短值），名字随进程退出释放，下次调用由 .service 重新激活；有在途请求时绝不退出（否则调用方拿到错误、选择器被强杀）；`install.sh`/`uninstall.sh` 的 `kill_stale_services` 与 `is_service_resident` 已把 `portal-bridge.cjs`、`--portal-service` 纳入匹配。e2e 113 覆盖持名 + 转发 + 空闲退出。
 - **不要再让 `.service` 直接 Exec Electron**：`HoshinekoFM --portal` 参数仍保留（e2e/诊断用，直接持对外名字），生产环境不要用——冷激活必卡 25s。
-- **服务模式提前注册的窗口期**：名字一挂上宿主就可能发请求，而此刻 `app.whenReady()` 可能尚未到达——Electron 在 ready 前 `new BrowserWindow` 会抛。新增请求路径要注意 ready 门控（FileManager1 的 `void openWindowRef(...)` 目前无 `.catch()`，会变成未处理拒绝）。
+- **D-Bus 后端注册的两个顺序坑（v3.0.1011，实测「首次激活窗口不出现」）**：
+  1. **必须 `bus.export` 在 `bus.requestName` 之前**。dbus-daemon 在名字出现的那一刻就投递排队中的调用（桥转发、其他程序），若对象还没导出，调用方收到 `UnknownMethod`（日志 `Backend call failed: ... does not exist`），用户看到的是「第一次弹不出来、第二次正常」。portal 与 FileManager1 两处都已改成先导出后抢名。
+  2. **建窗前必须 `await app.whenReady()`**。服务模式在 ready 之前就注册后端，首个请求可能在 ready 前到达，Electron 此时 `new BrowserWindow` 会抛——被 picker 层当成「用户取消」。窗口工厂已完成 ready 门控；`FileManager1` 的 `openWindowRef` 也补了 `.catch()`（否则是未处理拒绝）。
+  3. 桥侧另有兜底：转发遇到 `UnknownMethod`/`UnknownObject`/`ServiceUnknown`/`NameHasNoOwner` 重试 20×50ms，覆盖后端冷启动（AppImage 挂载 + Electron 起来）的窗口。
+  4. 排查口诀：第一次调用失败、第二次成功 → 先怀疑导出/抢名顺序；窗口从不出现且 25s 后超时 → 怀疑 ready 门控或目标名未激活。
 - **排查手法**：`busctl --user introspect org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop` 看不到 `portal.FileChooser` = 宿主那次创建代理失败且**不会自愈**，只能重启 `xdg-desktop-portal`；重启前先确保 impl 名已在线（否则再卡 25s）。`journalctl --user -u xdg-desktop-portal` 里 `StartServiceByName ... 已到超时限制` 即本环。
 脚本里读桌面列表必须 `printf '%s\n'`——无换行时 `read` 在 EOF 返回非零，`while` 循环体不会执行（本轮真实 bug）。
 

@@ -281,32 +281,6 @@ export async function setupPortalFileChooser(
   bus.on('error', (e) => {
     console.error(`[portal] 会话总线连接错误（总线可能已重启，等待重新注册）：${(e as Error)?.message ?? e}`);
   });
-  try {
-    // RequestNameReply.PrimaryOwner = 1（dbus-next 未导出该枚举，按 D-Bus 规范常量比对）
-    const reply = await bus.requestName(busName, dbus.NameFlag.DO_NOT_QUEUE);
-    if (reply !== 1) {
-      const owner = await queryNameOwner(bus, busName);
-      // 名字被本进程既有连接持有（安装/重装成功后重新注册时常见）：
-      // 视为注册成功——旧连接仍在服务、名字照常应答，继续使用即可；
-      // 若按冲突上报会误弹「旧版常驻」警告
-      if (owner && (await queryOwnerPid(bus, owner)) === process.pid) {
-        bus.disconnect();
-        return true;
-      }
-      console.error(
-        `[portal] 总线名 ${busName} 注册失败：已被占用${owner ? `（owner: ${owner}）` : ''}。` +
-        '占名者可能是旧常驻服务进程（--portal）或另一实例——若刚升级/重装，' +
-        '请确认旧进程已退出（或重跑系统集成安装以清理旧常驻）。',
-      );
-      bus.disconnect();
-      return false;
-    }
-  } catch (e) {
-    console.error(`[portal] 总线名 ${busName} 注册异常：${(e as Error)?.message ?? e}`);
-    bus.disconnect();
-    return false;
-  }
-
   /** org.freedesktop.impl.portal.FileChooser 实现（新协议：直接返回结果） */
   class FileChooserBackend extends Interface {
     private readonly createPickerRef: typeof createPicker;
@@ -374,7 +348,36 @@ export async function setupPortalFileChooser(
     },
   });
 
+  // **先导出对象、再抢名字**（顺序不能反）：dbus-daemon 在名字出现的那一刻
+  // 就会把排队中的调用投递过来（桥进程转发 / 其他程序），若此时对象尚未
+  // export，调用方拿到 `UnknownMethod`，表现为「第一次弹不出来、第二次正常」。
   bus.export(FILE_CHOOSER_PATH, new FileChooserBackend(createPicker));
+
+  try {
+    // RequestNameReply.PrimaryOwner = 1（dbus-next 未导出该枚举，按 D-Bus 规范常量比对）
+    const reply = await bus.requestName(busName, dbus.NameFlag.DO_NOT_QUEUE);
+    if (reply !== 1) {
+      const owner = await queryNameOwner(bus, busName);
+      // 名字被本进程既有连接持有（安装/重装成功后重新注册时常见）：
+      // 视为注册成功——旧连接仍在服务、名字照常应答，继续使用即可；
+      // 若按冲突上报会误弹「旧版常驻」警告
+      if (owner && (await queryOwnerPid(bus, owner)) === process.pid) {
+        bus.disconnect();
+        return true;
+      }
+      console.error(
+        `[portal] 总线名 ${busName} 注册失败：已被占用${owner ? `（owner: ${owner}）` : ''}。` +
+        '占名者可能是旧常驻服务进程（--portal）或另一实例——若刚升级/重装，' +
+        '请确认旧进程已退出（或重跑系统集成安装以清理旧常驻）。',
+      );
+      bus.disconnect();
+      return false;
+    }
+  } catch (e) {
+    console.error(`[portal] 总线名 ${busName} 注册异常：${(e as Error)?.message ?? e}`);
+    bus.disconnect();
+    return false;
+  }
 
   console.log(`Portal FileChooser backend registered as ${busName}`);
   return true;

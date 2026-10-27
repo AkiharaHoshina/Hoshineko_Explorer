@@ -109,6 +109,34 @@ function cancelIdle(): void {
  * @param body - 参数数组
  * @returns 后端回包 `[响应码, 结果字典]`；失败抛 portal 错误
  */
+/** 可重试的瞬时错误：目标刚被激活、名字刚出现但对象还没导出的竞态 */
+const TRANSIENT_DBUS_ERRORS = new Set([
+  'org.freedesktop.DBus.Error.UnknownMethod',
+  'org.freedesktop.DBus.Error.UnknownObject',
+  'org.freedesktop.DBus.Error.UnknownInterface',
+  'org.freedesktop.DBus.Error.ServiceUnknown',
+  'org.freedesktop.DBus.Error.NameHasNoOwner',
+]);
+/** 重试次数与间隔：后端冷启动（AppImage 挂载 + Electron 起来）通常 ~1s */
+const RELAY_RETRY_TIMES = 20;
+const RELAY_RETRY_MS = 50;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * 把一个 FileChooser 方法调用原样转发给选择器后端。
+ *
+ * 签名固定为 `osssa{sv}`（OpenFile/SaveFile/SaveFiles 三者一致），
+ * 参数与回包都不做解析——解析留在后端，桥只做搬运。
+ *
+ * 「名字已出现、对象尚未导出」是 D-Bus 激活的固有时序：dbus-daemon 在名字
+ * 出现的那一刻就投递排队消息。这类瞬时错误（UnknownMethod/ServiceUnknown
+ * 等）在 ~1s 内重试，避免用户第一次调用静默失败。
+ *
+ * @param member - 方法名
+ * @param body - 参数数组
+ * @returns 后端回包 `[响应码, 结果字典]`；失败抛 portal 错误
+ */
 async function forward(
   member: string,
   body: unknown[],
@@ -117,30 +145,36 @@ async function forward(
   if (!b || closing) {
     throw new dbus.DBusError('org.freedesktop.portal.Error.Failed', 'portal bridge is shutting down');
   }
-  let reply: dbus.Message | null;
-  try {
-    reply = await b.call(new dbus.Message({
-      type: dbus.MessageType.METHOD_CALL,
-      destination: TARGET_NAME,
-      path: PORTAL_OBJECT_PATH,
-      interface: PORTAL_FILE_CHOOSER_IFACE,
-      member,
-      signature: 'osssa{sv}',
-      body,
-    }));
-  } catch (e) {
-    // 目标未激活/已退出：转成 portal 错误，调用方（Firefox 等）会给出自己的
-    // 失败提示——绝不能伪装成「用户取消」，否则故障会被静默吞掉
-    const err = e as { text?: string; message?: string };
-    throw new dbus.DBusError(
-      'org.freedesktop.portal.Error.Failed',
-      `选择器后端不可用：${err?.text ?? err?.message ?? String(e)}`,
-    );
+  for (let attempt = 0; ; attempt += 1) {
+    let reply: dbus.Message | null;
+    try {
+      reply = await b.call(new dbus.Message({
+        type: dbus.MessageType.METHOD_CALL,
+        destination: TARGET_NAME,
+        path: PORTAL_OBJECT_PATH,
+        interface: PORTAL_FILE_CHOOSER_IFACE,
+        member,
+        signature: 'osssa{sv}',
+        body,
+      }));
+    } catch (e) {
+      const err = e as { type?: string; text?: string; message?: string };
+      if (err?.type && TRANSIENT_DBUS_ERRORS.has(err.type) && attempt < RELAY_RETRY_TIMES) {
+        await sleep(RELAY_RETRY_MS);
+        continue;
+      }
+      // 目标未激活/已退出：转成 portal 错误，调用方（Firefox 等）会给出自己的
+      // 失败提示——绝不能伪装成「用户取消」，否则故障会被静默吞掉
+      throw new dbus.DBusError(
+        'org.freedesktop.portal.Error.Failed',
+        `选择器后端不可用：${err?.text ?? err?.message ?? String(e)}`,
+      );
+    }
+    if (!reply) {
+      throw new dbus.DBusError('org.freedesktop.portal.Error.Failed', '选择器后端无回包');
+    }
+    return reply.body as [number, Record<string, dbus.Variant>];
   }
-  if (!reply) {
-    throw new dbus.DBusError('org.freedesktop.portal.Error.Failed', '选择器后端无回包');
-  }
-  return reply.body as [number, Record<string, dbus.Variant>];
 }
 
 /**

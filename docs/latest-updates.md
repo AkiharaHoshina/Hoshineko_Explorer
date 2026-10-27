@@ -1,5 +1,22 @@
 # 更新日志
 
+## v3.0.1011 — 修复首次激活时选择器窗口不出现
+
+- 版本号升至 `3.0.1011`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1011.AppImage` / `HoshinekoFM-3.0.1011-size.AppImage`。
+- **根因一（导出晚于抢名）**：后端先 `requestName` 再 `bus.export`——dbus-daemon
+  在名字出现的那一刻就把排队的调用投递过来，此时对象还没导出，调用方拿到
+  `UnknownMethod`（日志 `Backend call failed: ... does not exist`），表现为
+  「第一次弹不出来，第二次正常」。改为**先导出、再抢名字**（portal 与
+  FileManager1 两处）。
+- **根因二（ready 之前建窗）**：服务模式在 `app.whenReady()` 之前就注册后端，
+  首个请求可能在 ready 前到达，Electron 此时 `new BrowserWindow` 会抛——被
+  picker 层当成「用户取消」。窗口工厂现在先 `await app.whenReady()` 再建窗；
+  FileManager1 的 `openWindowRef` 补 `.catch()`，不再产生未处理拒绝。
+- **桥侧兜底**：转发遇到 `UnknownMethod` / `UnknownObject` / `ServiceUnknown` /
+  `NameHasNoOwner` 等瞬时错误时重试（20 × 50ms），覆盖后端冷启动（AppImage
+  挂载 + Electron 起来）的窗口。
+
 ## v3.0.1010 — Portal 名字持有桥（根治冷激活卡死）
 
 - 版本号升至 `3.0.1010`；AppImage 产物名变为
