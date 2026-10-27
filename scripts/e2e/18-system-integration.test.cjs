@@ -49,6 +49,12 @@ const path = require('path');
     // --user-only 幂等运行：沙箱 HOME + 临时 packaging 目录
     const fakeHome = h.tempDir('hoshineko-e2e-home-');
     const fakePkg = h.tempDir('hoshineko-e2e-pkg-');
+    // 沙箱化二进制来源：不依赖开发机上是否真的装过系统集成
+    // （/usr/local/bin/HoshinekoFM 可能已被用户卸载）
+    const sandboxAppImage = path.join(h.tempDir('hoshineko-e2e-app-'), 'HoshinekoFM');
+    fs.writeFileSync(sandboxAppImage, '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(sandboxAppImage, 0o755);
+    const sandboxNoSystemBin = path.join(fakeHome, 'no-system-bin');
     const run = (script, extraEnv = {}) =>
       spawnSync(script, ['--user-only'], {
         env: {
@@ -56,6 +62,8 @@ const path = require('path');
           HOME: fakeHome,
           XDG_CURRENT_DESKTOP: 'niri',
           HOSHINEKO_PACKAGING_DIR: fakePkg,
+          APPIMAGE: sandboxAppImage,
+          HOSHINEKO_SYSTEM_BIN: sandboxNoSystemBin,
           ...extraEnv,
         },
         encoding: 'utf-8',

@@ -12,6 +12,14 @@
 - **修复**：全部安装改为同目录临时文件 + rename 的原子替换（源与目标相同
   时跳过重写）；portal 重启后主动检查 `FileChooser` 接口，失败时给出
   `reset-failed` + `restart` 的修复命令。
+- **修复启动期环（portal 卡死）**：宿主 portal 激活 `--portal` 服务时在等
+  本进程持有 impl 总线名，而注册点原在 `app.whenReady()` 里——ready 又要等
+  Chromium 启动期向同一个宿主 portal 发出的 Settings 查询，三方互等，25 秒
+  后 `Failed to create file chooser proxy`，FileChooser 接口整体消失。
+  现在服务模式（`--portal` / `--filemanager1`）在 `app.whenReady()` **之前**
+  完成 D-Bus 后端注册（`dbus-next` 不依赖 Electron ready），环从结构上消失
+  ——私有会话总线实测 FileChooser 189ms 就绪。**加超时不能解决这类问题**，
+  只会把「卡死」变成「更快失败」。
 
 ## v3.0.1008 — Places 交互细节
 

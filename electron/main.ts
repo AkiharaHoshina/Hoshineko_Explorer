@@ -1063,6 +1063,16 @@ function parseRangeHeader(header: string | null, size: number): { start: number;
   return { start, end };
 }
 
+// 服务模式（--portal / --filemanager1）：**必须在 app ready 之前**注册
+// D-Bus 后端。Chromium 启动阶段会向宿主 xdg-desktop-portal 查询 Settings
+// （明暗主题），而宿主此时可能正在激活本进程——若我们等 whenReady（要等
+// Chromium 那次查询出结果）才注册，就形成环形等待，25s 后宿主放弃创建
+// FileChooser 代理，FileChooser 接口整体消失（“门户卡死/SIGBUS”现场）。
+// dbus-next 不依赖 Electron ready，这里先注册可立即解开死锁。
+if (SERVICE_ONLY_MODE) {
+  void registerBackends().then(handleBackendsResult);
+}
+
 app.whenReady().then(() => {
   // CLI 子命令：执行体在模块顶层（runCliAction）——此处早退跳过菜单/
   // 协议/D-Bus 后端/窗口等全部启动流程，脚本执行期间 ready 到达也不会
@@ -1193,9 +1203,9 @@ app.whenReady().then(() => {
   // backends.ts 共享模块——与 e2e harness 同一条代码路径）：
   // 注册失败原因已由各 setup 输出 console.error（含占名者 owner），
   // 返回值上浮到 handleBackendsResult 决定服务模式退出码。
-  void registerBackends().then(handleBackendsResult);
-
+  // 服务模式已在 app ready 之前完成注册（见上），此处只处理 GUI
   if (!SERVICE_ONLY_MODE) {
+    void registerBackends().then(handleBackendsResult);
     createWindow();
   }
   // 跟随系统模式的实时更新源：监听系统明暗变化（gsettings monitor +
