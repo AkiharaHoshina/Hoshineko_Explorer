@@ -142,15 +142,15 @@ html {
 }
 
 :root {
-  /* Places 与标签页栏的公共区域色：深度介于左侧功能栏
-     （surface-container）与文件区（surface-container-low）之间——
-     M3 高程阶梯上两者相邻无现成 token，用 color-mix 对半混合；
-     两色均取自主题变量，设置里的 M3 取色变化时自动跟随重解 */
-  --hoshineko-places-bg: color-mix(
-    in srgb,
-    var(--md-sys-color-surface-container) 50%,
-    var(--md-sys-color-surface-container-low) 50%
-  );
+  /* Places 与标签页栏的公共区域色：用 surface-container-high，
+     与文件区（surface-container-low）拉开至少一级高程——低一级的
+     container 与 low 在深色下只差约 4/255，视觉上几乎同色。
+     两区严格共用同一变量，主题切换时一起重解。 */
+  --hoshineko-places-bg: var(--md-sys-color-surface-container-high);
+  /* Chrome 风格标签页：文件区与选中标签页必须严格同色，因此共用
+     同一个语义变量；标签条与 Places 同色。 */
+  --hoshineko-content-bg: var(--md-sys-color-surface-container-low);
+  --hoshineko-tabstrip-bg: var(--hoshineko-places-bg);
 }
 
 .app-shell {
@@ -169,7 +169,7 @@ html {
      介于功能栏与文件区之间的混合色（见 Sidebar.css）。
      左上不再切圆角：圆角会在标签页顶部与 Places 顶部之间
      留下缺口（缝），去圆角后两者顶部平齐 */
-  background: var(--md-sys-color-surface-container-low);
+  background: var(--hoshineko-content-bg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -185,11 +185,10 @@ html {
   height: auto;
   display: flex;
   flex-direction: column;
-  /* 与文件浏览区同色：补上标签页与文件区之间的接缝
-     （内部 .tab-bar 背景透明透出此色）；底部分界线标出标签页栏区
-     与文件区的边界（分界线随标签页栏整体下移） */
-  background: var(--md-sys-color-surface-container-low);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  /* Chrome 风格：标签条用弱一级的容器色，选中标签自身用文件区同色，
+     两者之间不再画分割线——选中页与文件区连成一片。 */
+  background: var(--hoshineko-tabstrip-bg);
+  border-bottom: 0;
 }
 
 .empty-state {

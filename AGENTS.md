@@ -198,6 +198,45 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
 - **对象实例页轮询必须 `isActive` 门控**：隐藏标签页常驻 DOM，旧 tick 在非活动标签页仍每 1–2 s 读一次对象。新增轮询/定时器一律检查 `isActive === false` 早退（切回时 effect 重挂立即补 tick）。
 - **拆分约定**：见 `docs/代码拆分可行性报告.md`。拆组件时保留原类名/DOM 结构（e2e 选择器与软件渲染坐标敏感），常量独立模块，回调 useCallback，单阶段提交并跑对应 e2e；不改变隐藏标签页常驻、无路由、SettingsContext 单一数据源三条模型。
 
+## Chrome 风格标签页（v3.0.1003 起）
+
+- **两个语义色变量**（`src/index.css` `:root`）：`--hoshineko-content-bg`
+  = `surface-container-low`（文件区 + 选中标签页，必须同色）；
+  `--hoshineko-tabstrip-bg` = `var(--hoshineko-places-bg)`
+  = `surface-container-high`（标签条与 Places 同色，且与文件区至少
+  拉开一级高程——`surface-container` 与 `low` 在深色下只差约 4/255，
+  视觉上几乎同色）。不要在 TabBar.css 里直接写 `surface-container-*`，
+  否则预设/壁纸/DMS 主题切换时会与文件区脱节。
+- **上下圆角共用 `--tab-radius: 12px`**：顶部 `border-radius` 与底部
+  补角尺寸/半径都引用它，不要再分开写 10/14px。
+- **选中页底部凹角是「向外补角」**：标签本体给内容色，左右各加一个
+  `var(--tab-radius)` 伪元素补角，`mask: radial-gradient(circle at
+  0 0 / 100% 0, transparent calc(var(--tab-radius) - 1px),
+  #000 var(--tab-radius))` 只保留靠近标签底角的圆弧片。**圆心在外上角、
+  内容色在圆外**，圆弧才能与标签侧边和底边相切；写反（圆心在内下角）
+  会得到侧边折角，不是参考图的 Chrome 过渡。补角位于标签盒外、会盖住
+  相邻标签底角，选中页 `z-index:1`。首个标签 `:first-child.active`
+  **只不生成左补角，左上圆角保留**（用户说的「左侧无过渡」仅指底部）。
+- 标签本体不再需要 `::before` 承载整块背景；`::after` 只用于未选中
+  相邻标签的分隔线。
+- **不再有分割线**：`.tab-header-bar` 无 `border-bottom`，内容区比旧版
+  上移 1px（预期）；不要再补 `padding-bottom`，那会重新出现一条标签条色
+  的“假分割线”。
+- **未选中态无轮廓**：静止态背景透明、只留弱化文字；悬停时才用
+  `color-mix(on-surface 6%, transparent)`。相邻未选中标签的 `::after`
+  画 1px 分隔线（`left:-2.5px` 落在 4px gap 中间），悬停任一侧时淡出。
+- **横向滚动条隐藏**（`scrollbar-width:none` + `::-webkit-scrollbar`）：
+  滚动能力保留，但滚动条会切断选中页底部的无缝衔接。
+- **滚轮横向滚动**（`TabBar.tsx` 原生 wheel 监听，`passive:false`）：
+  标签溢出时纵向滚轮映射为横向（触控板 deltaX 直接生效），
+  `deltaMode` 行/页换算为像素；Ctrl+滚轮放行给缩放。改这里时跑
+  `scripts/e2e/110-tab-wheel-scroll.test.cjs`（合成 WheelEvent；注意
+  `scrollLeft` 受缩放影响可能是小数，边界断言用 1px 容差）。
+- **首个标签指 DOM 第一个**，不是滚动后的第一个可见标签；不要引入 JS
+  可见性判断。
+- e2e 注意：标签相关用例多为真实坐标点击，本机 1280×800（缩放 2）下
+  `84d` 等用例可能失败；用 DOM `.click()` 复现可区分环境问题与代码回归。
+
 ## 注意事项
 
 一定要写jsdoc！写字段说明！！！写i18n！！

@@ -1,45 +1,132 @@
 .tab-bar {
     display: flex;
     align-items: flex-end;
-    /* 背景透明：透出外层 .tab-header-bar 的文件区同款色。
-       高度对齐：颜色区底线与标签胶囊底线对齐——content-box 下总高
-       = 44（内容）+ 8（上 padding）= 52，标签胶囊 40 底对齐后底边
-       即 52（与原视觉位置一致：胶囊上边 12/下边 52），不再在胶囊
-       下方留 4px 空余 */
+    /* 背景透明：透出外层 .tab-header-bar 的标签条弱化色。
+       高度对齐：content-box 下总高 = 44（内容）+ 12（上 padding）= 52，
+       标签胶囊 40 底对齐后底边即 52；去掉分割线后选中页与文件区
+       在 y=52 处直接相接。 */
     background: transparent;
-    /* 左 padding 归零：首个标签胶囊左缘与文件区左侧边界对齐
-       （右 padding 保留，新建标签按钮与右缘保持间距）；
-       上 padding 8 → 12：标签页栏整体略微下移（分界线随之） */
+    /* 左 padding 归零：首个标签左缘与文件区左侧边界对齐 */
     padding: 12px 8px 0 0;
     height: 44px;
     gap: 4px;
     overflow-x: auto;
+    /* Chrome 同样不显示横向滚动条：滚动能力保留，但滚动条会把
+       选中页底部凹角/无分割线的视觉切断 */
+    scrollbar-width: none;
+}
+
+.tab-bar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
 }
 
 .tab-item {
+    /* 顶部圆角与底部凹角共用同一半径 */
+    --tab-radius: 12px;
+
+    position: relative;
+    /* 负 z-index 的内容色伪元素限制在本标签的堆叠上下文内，
+       不会落到标签条背景之下 */
+    isolation: isolate;
     display: flex;
     align-items: center;
     min-width: 120px;
     max-width: 240px;
     height: 40px;
     padding: 0 12px;
-    /* 比标签条浅一级，未激活标签仍保持可见的胶囊轮廓 */
-    background: var(--md-sys-color-surface-container);
+    /* 未选中：无胶囊轮廓，只留弱化文字；悬停才出现极淡状态层。
+       上下圆角共用 --tab-radius，避免顶部圆角与底部凹角大小不一 */
+    background: transparent;
     color: var(--md-sys-color-on-surface-variant);
-    border-radius: 12px 12px 0 0;
+    border-radius: var(--tab-radius) var(--tab-radius) 0 0;
     cursor: pointer;
     user-select: none;
-    transition: background 0.2s;
+    transition: background-color 0.18s ease, color 0.18s ease, opacity 0.18s ease;
     flex: 1;
 }
 
 .tab-item:hover {
-    background: var(--md-sys-color-surface-container-high);
+    background: color-mix(in srgb, var(--md-sys-color-on-surface) 6%, transparent);
+    color: var(--md-sys-color-on-surface);
 }
 
+/* Chrome 选中态：标签本体用文件区内容色，底部左右各补一个向外的
+   「凹角」——内容色在标签外侧底部向下/向外张开，标签条色在剩余
+   区域形成内凹圆弧。缺了这对补角，选中页只是一个普通圆角矩形。
+   补角用伪元素放在标签盒外（z-index:-1），因此只在 active 上生成；
+   未选中标签不占伪元素。 */
 .tab-item.active {
-    background: var(--md-sys-color-surface-container-highest);
+    background: var(--hoshineko-content-bg);
     color: var(--md-sys-color-on-surface);
+    z-index: 1;
+}
+
+.tab-item.active:hover {
+    background: var(--hoshineko-content-bg);
+}
+
+/* 左补角：圆弧圆心在补角左上（= 标签左缘与凹角上沿的交点），
+   圆内透明、圆外填内容色。这样曲线在标签侧边与底边都相切，
+   形成参考图那种平滑内凹；半径若反向，曲线会在侧边留下折角。 */
+.tab-item.active::before {
+    content: "";
+    position: absolute;
+    left: calc(-1 * var(--tab-radius));
+    bottom: 0;
+    width: var(--tab-radius);
+    height: var(--tab-radius);
+    z-index: -1;
+    background: var(--hoshineko-content-bg);
+    pointer-events: none;
+    mask: radial-gradient(
+        circle at 0 0,
+        transparent calc(var(--tab-radius) - 1px),
+        #000 var(--tab-radius)
+    );
+}
+
+/* 右补角：镜像（圆心在补角右上） */
+.tab-item.active::after {
+    content: "";
+    position: absolute;
+    right: calc(-1 * var(--tab-radius));
+    bottom: 0;
+    width: var(--tab-radius);
+    height: var(--tab-radius);
+    z-index: -1;
+    background: var(--hoshineko-content-bg);
+    pointer-events: none;
+    mask: radial-gradient(
+        circle at 100% 0,
+        transparent calc(var(--tab-radius) - 1px),
+        #000 var(--tab-radius)
+    );
+}
+
+/* 第一个标签被选中：左侧没有底部过渡——只去掉左补角，
+   左上圆角保留（上圆角不参与「左侧过渡」语义） */
+.tab-item:first-child.active::before {
+    content: none;
+}
+
+/* 未选中标签之间的 Chrome 式细分隔线；悬停任一相邻标签时淡出 */
+.tab-item:not(.active) + .tab-item:not(.active)::after {
+    content: "";
+    position: absolute;
+    left: -2.5px;
+    top: 12px;
+    bottom: 12px;
+    width: 1px;
+    background: var(--md-sys-color-outline-variant);
+    opacity: 1;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+}
+
+.tab-item:not(.active):hover::after,
+.tab-item:not(.active):hover + .tab-item:not(.active)::after {
+    opacity: 0;
 }
 
 .tab-item.drag-over {
@@ -49,7 +136,15 @@
     outline-offset: -2px;
 }
 
+/* 拖放高亮时让元素底色透出，并隐藏分隔线 */
+.tab-item.drag-over::before,
+.tab-item.drag-over::after {
+    opacity: 0;
+}
+
 .tab-title {
+    position: relative;
+    z-index: 1;
     flex: 1;
     white-space: nowrap;
     overflow: hidden;
@@ -59,6 +154,8 @@
 }
 
 .tab-close-btn {
+    position: relative;
+    z-index: 1;
     background: transparent;
     border: none;
     color: inherit;
@@ -73,7 +170,6 @@
 
 .tab-close-btn:hover {
     background: rgba(0, 0, 0, 0.1);
-    /* Use generic hover for now or state layer */
     opacity: 1;
 }
 

@@ -132,6 +132,34 @@ export const TabBar: React.FC<TabBarProps> = ({
   const kbIdxRef = useRef(kbIdx);
   const barRef = useRef<HTMLDivElement | null>(null);
 
+  /**
+   * 标签栏横向滚动：横向滚动条已隐藏，改用滚轮水平移动标签栏
+   * （等价触控左右拖动）。纵向滚轮映射为横向，触控板横向滚动直接
+   * 使用 deltaX；`deltaMode` 为行/页时换算成像素。
+   * 使用原生监听并 `passive:false`：React 的根级 wheel 监听在部分
+   * 路径上是 passive 的，无法可靠 preventDefault。
+   */
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const onWheel = (e: WheelEvent) => {
+      // Ctrl+滚轮是缩放，不拦截
+      if (e.ctrlKey) return;
+      const dominant = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? bar.clientWidth : 1;
+      const delta = dominant * unit;
+      if (delta === 0) return;
+      const maxScroll = bar.scrollWidth - bar.clientWidth;
+      if (maxScroll <= 0) return;
+      const next = Math.max(0, Math.min(maxScroll, bar.scrollLeft + delta));
+      if (next === bar.scrollLeft) return;
+      e.preventDefault();
+      bar.scrollLeft = next;
+    };
+    bar.addEventListener('wheel', onWheel, { passive: false });
+    return () => bar.removeEventListener('wheel', onWheel);
+  }, []);
+
   // 活动标签变化时同步键盘当前项
   useEffect(() => {
     const i = tabs.findIndex((tab) => tab.id === activeTabId);
