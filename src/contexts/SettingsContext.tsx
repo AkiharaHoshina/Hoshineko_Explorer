@@ -75,6 +75,9 @@ export interface SettingsContextValue {
   /** 界面缩放（整页缩放百分比 50–200） */
   uiScale: number;
   setUiScale: (v: number) => void;
+  /** Places 滚轮翻页灵敏度（百分比 50–500，默认 100；越大越灵敏） */
+  sidebarWheelSensitivity: number;
+  setSidebarWheelSensitivity: (v: number) => void;
   // ── 搜索 ──
   searchGroupByDir: boolean;
   setSearchGroupByDir: (v: boolean) => void;

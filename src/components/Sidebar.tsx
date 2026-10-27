@@ -129,6 +129,11 @@ interface SidebarProps {
   terminalOpen?: boolean;
   /** 切换内置终端（点击 Places 内建终端入口 = toggleTerminal） */
   onToggleTerminal?: () => void;
+  /**
+   * 滚轮翻页灵敏度（百分比 50–500，默认 100＝与旧版手感一致）：
+   * 数值越大，翻一页所需累计滚动位移越小。
+   */
+  wheelSensitivity?: number;
 }
 
 /** 侧边栏拖放目标标识前缀与常量 */
@@ -163,8 +168,13 @@ const SECTION_TITLE_TOP = 16;
 const DEVICE_HEADER_H = 32;
 /** 分页内容区顶部内边距（.sidebar-body padding-top），需从可用高度中扣除 */
 const BODY_TOP_PADDING = 8;
-/** 滚轮/触控板翻页阈值（累计位移像素） */
+/** 触控板翻页阈值（累计横向位移像素） */
 const WHEEL_FLIP_THRESHOLD = 48;
+/** 鼠标滚轮一格的标准位移（Chromium 下 100/120）：以"一格一页"为 100% 基准 */
+const WHEEL_MOUSE_NOTCH = 100;
+/** 翻页灵敏度范围（百分比）：50%–500% */
+const SENSITIVITY_MIN = 50;
+const SENSITIVITY_MAX = 500;
 /** 翻页冷却（毫秒）：防止惯性/高频事件连续翻过多页 */
 const WHEEL_FLIP_COOLDOWN_MS = 300;
 /** 触摸横向拖动翻页阈值 */
@@ -241,6 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   showTerminalPlace = true,
   terminalOpen = false,
   onToggleTerminal,
+  wheelSensitivity = 100,
 }) => {
   const isPicker = variant === 'picker';
   const [places, setPlaces] = useState<
@@ -420,17 +431,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
 
   /**
-   * 翻页：delta = ±1，自动夹在 [0, pageCount-1]。
+   * 翻页：delta = ±1。默认**循环**（末页继续翻回到首页，首页反向翻到
+   * 末页）；拖拽边缘自动翻页传 wrap=false（避免停在边缘无限翻页）。
    * 页数以参数传入（调用方各自持有当次渲染的 pageCount），避免 ref 同步。
    */
-  const flipPage = useCallback((delta: number, count: number) => {
+  const flipPage = useCallback((delta: number, count: number, wrap = true) => {
     if (count <= 1) return;
     // 新页从翻页方向的对侧滑入（动画在 display:none → flex 时重新触发）
     asideRef.current?.style.setProperty(
       '--sidebar-slide-x',
       delta > 0 ? '24px' : '-24px',
     );
-    setPageIndex((prev) => Math.max(0, Math.min(prev + delta, count - 1)));
+    setPageIndex((prev) => {
+      const next = prev + delta;
+      if (wrap) return ((next % count) + count) % count;
+      return Math.max(0, Math.min(next, count - 1));
+    });
   }, []);
 
   /** 分页内容区尺寸测量：可用高度决定每页容纳多少条目 */
@@ -499,7 +515,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     edgeDirRef.current = dir;
     // 页数从 DOM 读取：回调保持稳定，不因翻页重建文档级监听
     const count = el.querySelectorAll('.sidebar-page').length;
-    edgeFlipRef.current = setInterval(() => flipPage(dir, count), EDGE_FLIP_INTERVAL_MS);
+    edgeFlipRef.current = setInterval(() => flipPage(dir, count, false), EDGE_FLIP_INTERVAL_MS);
   }, [flipPage, stopEdgeFlip]);
 
   useEffect(() => () => stopEdgeFlip(), [stopEdgeFlip]);
@@ -1482,6 +1498,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // ── 切页：两组分别分页后拼接，收起态恒为第 0 页 ──
   const pages: SidebarNode[][] = (() => {
+    // 收起态（图标轨道）：恒定第一部分、单页——窗口太矮时由 .sidebar-body
+    // 滚动（滚轮/触控板上下/触摸拖动/键盘焦点跟随），不再分页
+    if (collapsed) return [fixedNodes];
     const capacity = bodyHeight > 0 ? bodyHeight : 600;
     const fixedPages = paginateNodes(fixedNodes, capacity);
     const pinnedPages = paginateNodes(pinnedNodes, capacity);
@@ -1552,14 +1571,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       }
       const next = idx + (down ? 1 : -1);
       if (next < 0) {
-        if (currentPage > 0) {
+        // 循环翻页：首页再 ↑ → 末页最后一条
+        if (pageCount > 1) {
           flipPage(-1, pageCount);
           focusEdgeItem('last');
         }
         return;
       }
       if (next >= items.length) {
-        if (currentPage < pageCount - 1) {
+        // 循环翻页：末页再 ↓ → 首页第一条
+        if (pageCount > 1) {
           flipPage(1, pageCount);
           focusEdgeItem('first');
         }
@@ -1583,8 +1604,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const wheelAccRef = useRef(0);
   const wheelLastFlipRef = useRef(0);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  /** 触摸滑动刚翻过页：吞掉紧随其后的 click，避免顺带导航到划到的条目 */
+  const swipeSuppressClickRef = useRef(false);
 
   const handleSidebarWheel = (e: React.WheelEvent) => {
+    // 收起态恒定第一部分第 1 页：滚轮不改变当前页（用户定案）
+    if (collapsed) return;
     if (pageCount <= 1) return;
     if (pinReorderActiveRef.current || getDragState()) return;
     // 输入设备区分（用户定案）：
@@ -1598,10 +1623,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const isTrackpad = !isMouseWheel;
     const delta = isTrackpad ? e.deltaX : e.deltaY;
     if (!delta) return;
+    // 灵敏度：百分比同时缩放「翻页阈值」与「翻页冷却」。
+    // 鼠标基准取"一格一页"（100px），因此 50% 需要两格、100% 一格、
+    // 高灵敏度主要缩短冷却（快速滚动时翻得更快）；触控板基准 48px。
+    const sens = Math.max(SENSITIVITY_MIN, Math.min(SENSITIVITY_MAX, wheelSensitivity)) / 100;
+    const baseThreshold = isMouseWheel ? WHEEL_MOUSE_NOTCH : WHEEL_FLIP_THRESHOLD;
+    const threshold = baseThreshold / sens;
+    const cooldown = WHEEL_FLIP_COOLDOWN_MS / sens;
     const now = performance.now();
-    if (now - wheelLastFlipRef.current < WHEEL_FLIP_COOLDOWN_MS) return;
+    if (now - wheelLastFlipRef.current < cooldown) return;
     wheelAccRef.current += delta;
-    if (Math.abs(wheelAccRef.current) >= WHEEL_FLIP_THRESHOLD) {
+    if (Math.abs(wheelAccRef.current) >= threshold) {
       flipPage(wheelAccRef.current > 0 ? 1 : -1, pageCount);
       wheelAccRef.current = 0;
       wheelLastFlipRef.current = now;
@@ -1610,9 +1642,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   /** 触摸横向滑动翻页（鼠标拖动不参与） */
   const handleSidebarPointerDown = (e: React.PointerEvent) => {
-    if (e.pointerType === 'mouse') return;
+    if (collapsed || e.pointerType === 'mouse') return;
     touchStartRef.current = { x: e.clientX, y: e.clientY };
+    // 捕获指针：手指移出容器/元素重渲染时仍能收到 pointermove/up，
+    // 否则浏览器接管手势后只发 pointercancel，翻页永远不触发
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // 合成事件（e2e）没有真实指针，忽略
+    }
   };
+
+  /** 复位跟手位移（取消/结束时恢复过渡与 transform） */
+  const resetSwipeOffset = () => {
+    touchStartRef.current = null;
+    const page = asideRef.current?.querySelector<HTMLElement>('.sidebar-page[data-active]');
+    if (!page) return;
+    page.style.transition = '';
+    page.style.transform = '';
+  };
+
+  const handleSidebarPointerCancel = () => resetSwipeOffset();
 
   const handleSidebarPointerMove = (e: React.PointerEvent) => {
     const start = touchStartRef.current;
@@ -1630,16 +1680,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handleSidebarPointerUp = (e: React.PointerEvent) => {
     const start = touchStartRef.current;
-    touchStartRef.current = null;
+    const dx = start ? e.clientX - start.x : 0;
+    const dy = start ? e.clientY - start.y : 0;
+    resetSwipeOffset();
     if (!start) return;
-    const dx = e.clientX - start.x;
-    const dy = e.clientY - start.y;
-    const page = asideRef.current?.querySelector<HTMLElement>('.sidebar-page[data-active]');
-    if (page) {
-      page.style.transition = '';
-      page.style.transform = '';
-    }
+    if (collapsed) return;
     if (Math.abs(dx) >= TOUCH_FLIP_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+      swipeSuppressClickRef.current = true;
+      setTimeout(() => { swipeSuppressClickRef.current = false; }, 350);
       flipPage(dx < 0 ? 1 : -1, pageCount);
     }
   };
@@ -1705,6 +1753,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onPointerDown={handleSidebarPointerDown}
         onPointerMove={handleSidebarPointerMove}
         onPointerUp={handleSidebarPointerUp}
+        onPointerCancel={handleSidebarPointerCancel}
+        onClickCapture={(e) => {
+          if (swipeSuppressClickRef.current) {
+            e.stopPropagation();
+            e.preventDefault();
+            swipeSuppressClickRef.current = false;
+          }
+        }}
       >
         {pages.map((nodes, i) => (
           <div

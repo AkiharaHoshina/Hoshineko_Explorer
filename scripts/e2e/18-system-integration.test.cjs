@@ -84,6 +84,15 @@ const path = require('path');
       'environment.d 应包含 GTK_USE_PORTAL=1',
     );
 
+    // 用户级 FileManager1 激活文件（优先于 /usr/share 同名文件）
+    const userFm1 = path.join(
+      fakeHome, '.local', 'share', 'dbus-1', 'services', 'org.freedesktop.FileManager1.service',
+    );
+    h.assert.ok(fs.existsSync(userFm1), '应写入用户级 FileManager1 激活文件');
+    const fm1Content = fs.readFileSync(userFm1, 'utf-8');
+    h.assert.ok(/Name=org\.freedesktop\.FileManager1/m.test(fm1Content), 'FileManager1 名应正确');
+    h.assert.ok(/--filemanager1/.test(fm1Content), 'Exec 应带 --filemanager1');
+
     // 幂等：二次运行不重复追加
     const r2 = run(scriptPath);
     h.assert.strictEqual(r2.status, 0);
@@ -95,6 +104,7 @@ const path = require('path');
     h.assert.strictEqual(u1.status, 0, `卸载应成功：${u1.stderr}`);
     h.assert.strictEqual(fs.existsSync(confPath), false, 'portals.conf 无剩余内容应删除');
     h.assert.strictEqual(fs.existsSync(envConf), false, '卸载应删除安装时新建的 environment.d 配置');
+    h.assert.strictEqual(fs.existsSync(userFm1), false, '卸载应删除用户级 FileManager1 激活文件');
     h.assert.ok(
       u1.stdout.includes('[user] 清理 portal/FileManager1 常驻进程'),
       '卸载应执行常驻进程清理路径',

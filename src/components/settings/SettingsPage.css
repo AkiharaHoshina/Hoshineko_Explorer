@@ -238,6 +238,11 @@
   margin-bottom: 16px;
 }
 
+/* 导航栏灵敏度滑条：与普通设置行一致的上间距（分区标题后留白） */
+.settings-nav-sensitivity {
+  padding-top: 12px;
+}
+
 .settings-icon-size__header {
   margin-bottom: 8px;
   display: flex;

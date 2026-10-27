@@ -253,6 +253,28 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
 - 诊断口诀：`gdbus introspect` 看不到 FileChooser → 宿主 portal 或选路有问题；能看到但应用仍弹 GTK 对话框 → 应用没走门户（`GTK_USE_PORTAL`）。
 脚本里读桌面列表必须 `printf '%s\n'`——无换行时 `read` 在 EOF 返回非零，`while` 循环体不会执行（本轮真实 bug）。
 
+## FileManager1 归属（Dux Files 等同类应用，v3.0.1007 起，未发布）
+
+- **现象**：装了 Dux Files 后，Firefox「在文件夹中显示」打开的是 Dux Files。原因是两者都注册 `org.freedesktop.FileManager1`，名字没人持有时由 D-Bus 冷激活——`/usr/share/dbus-1/services` 里两份同名 `.service`，实际命中了 Dux 的。
+- **修复一（关键）**：一键安装额外写**用户级** `~/.local/share/dbus-1/services/org.freedesktop.FileManager1.service`。dbus-daemon 按 `XDG_DATA_HOME → XDG_DATA_DIRS` 搜索，用户目录优先，冷激活必定选本应用（实测：删除 Dux 持有者后 `ShowItems` 拉起的是 Hoshineko，`busctl` 显示 `hoshineko-fm`）。
+- **修复二（有限）**：注册失败且本应用是默认文件管理器（mimeapps `inode/directory=HoshinekoFM.desktop`）时尝试 `REPLACE_EXISTING` 接管。**注意 D-Bus 语义**：现任持有者没请求 `ALLOW_REPLACEMENT` 时只能排队（reply=2/InQueue），无法抢走正在运行的 Dux——遇到这种情况需要用户退出对方或等它退出。
+- 诊断：`busctl --user list | grep FileManager1` 看持有者 PID；`gdbus call --session --dest org.freedesktop.FileManager1 --object-path /org/freedesktop/FileManager1 --method org.freedesktop.FileManager1.ShowItems "['file:///tmp']" ""` 触发一次激活。
+- 手动跑 `HoshinekoFM --filemanager1` 调试时**必须 `env -u ELECTRON_RUN_AS_NODE`**，否则 Electron 以 node 模式运行并报 `bad option: --filemanager1`（不是程序 bug）。
+
+## Places 收起态滚动与焦点框（v3.0.1007 起）
+
+- 收起态不分页：`pages` 恒为 `[fixedNodes]`，`.sidebar--collapsed .sidebar-body` 恢复 `overflow-y:auto`（细滚动条）。窗口太矮时滚轮/触控板上下/触摸拖动/键盘焦点跟随都能滚动；滚轮翻页与触摸翻页在收起态直接返回。
+- 头部按钮（折叠/终端）焦点框改为内嵌 `outline-offset:-2px`——40px 行高下外扩的环会被容器裁掉（「Tab 选框显示不全」的根因）。
+
+## 设置分类：导航合并（v3.0.1007 起）
+
+- **分类改名**：根页第一类 `仪表盘` → `导航`（id `dashboard` → `navigation`，图标 `explore`），虚拟路径 `settings://navigation`。
+- **合并**：`对象面板`（objects）与 `内建终端`（built-in-terminal）两个分类页删除，设置项移入导航页：顺序为 仪表盘 → 导航栏（灵敏度滑条 + 内建终端开关）→ 对象面板。
+- **旧路径重定向**：`settingsPath.ts` 的 `LEGACY_CAT_ALIASES` 把 dashboard/objects/built-in-terminal 归一到 navigation；`parseSettingsPath` 返回新 id，`normalizeSettingsPath` 因此在 ExplorerTab 里自动改写 URL/tab 路径，旧固定项与深链接 `?focus=` 继续可用（rowId 未变）。
+- **新增设置** `settings.sidebarWheelSensitivity`（50–500%，默认 100）：同时缩放翻页阈值与冷却。**鼠标基准是"一格一页"（100px）**——50% 需两格、100% 一格、高灵敏度主要缩短冷却（快速滚动翻得更快）；触控板基准 48px。只缩放阈值而不改鼠标基准，滑块对鼠标几乎无效（用户实测）。收起态禁用滚轮与触摸翻页。**翻页默认循环**：滚轮/触控板/触摸/键盘在末页继续向前回到首页，首页反向回到末页（拖拽边缘自动翻页不循环，避免停在边缘无限翻）。
+- 搜索索引：`settingsSearchIndex` 里对应行 cat 改为 `navigation`、section 保持原分类标题键；新增滑条行 `navigation-wheel-sensitivity`。改分类时必须同步这里，否则搜索命中的深链接会指向已删分类。
+- e2e：103a/103b/103g/103h/103j 的卡片数与分类名、路径断言已随合并更新；111 覆盖收起态滚轮与灵敏度阈值。
+
 ## Places 分页与图标轨道（v3.0.1005 起）
 
 - **结构**：`Sidebar.tsx` 渲染 `<aside .sidebar>` = `.sidebar-header`（折叠按钮 + 内建终端按钮 + 圆点切换器）+ `.sidebar-body > .sidebar-page[data-active]`。第一部分（仪表盘/文件位置/设置/对象/回收站）与第二部分（已固定 → 添加固定 → 设备）**各自分页、互不混页**。

@@ -47,6 +47,14 @@ PORTALS_CREATED_LIST="$PORTALS_CONF_DIR/.hoshineko-portals-created"
 ENV_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/environment.d"
 ENV_CONF="$ENV_DIR/60-hoshineko-portal.conf"
 ENV_CREATED_LIST="$ENV_DIR/.hoshineko-created"
+# 用户级 FileManager1 激活文件：D-Bus 在同名 .service 重复时按
+# XDG_DATA_HOME → XDG_DATA_DIRS 顺序取先命中者，用户目录优先于
+# /usr/share——Dux Files 等同样注册 org.freedesktop.FileManager1 的
+# 应用会在冷激活时抢走 Firefox「在文件夹中显示」，用户级文件保证激活
+# 到本应用。
+USER_SERVICES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/dbus-1/services"
+FM1_USER_SERVICE="$USER_SERVICES_DIR/org.freedesktop.FileManager1.service"
+SERVICES_CREATED_LIST="$USER_SERVICES_DIR/.hoshineko-created"
 # 固定安装路径（可经环境变量覆盖：测试沙箱 / 定制安装）
 SYSTEM_BIN="${HOSHINEKO_SYSTEM_BIN:-/usr/local/bin/HoshinekoFM}"
 USER_BIN="${HOSHINEKO_USER_BIN:-$HOME/.local/bin/HoshinekoFM}"
@@ -334,6 +342,29 @@ root_install() {
   echo "[root] portal 配置与 D-Bus 激活文件已安装"
 }
 
+# 写入用户级 FileManager1 激活文件（优先于 /usr/share 下的同名文件）。
+# 已存在且不是本应用的（用户自建）不覆盖，只提示。
+install_user_fm1_service() {
+  local exec_bin="$USER_BIN"
+  [ -x "$exec_bin" ] || exec_bin="$SYSTEM_BIN"
+  [ -x "$exec_bin" ] || return 0
+  if [ -f "$FM1_USER_SERVICE" ] && ! grep -q 'HoshinekoFM' "$FM1_USER_SERVICE"; then
+    echo "[user] $FM1_USER_SERVICE 已存在且非本应用，跳过（如需优先请手动处理）"
+    return 0
+  fi
+  mkdir -p "$USER_SERVICES_DIR"
+  {
+    printf '# Hoshineko：用户级 FileManager1 激活文件\n'
+    printf '# 用户目录优先于 /usr/share，避免其他文件管理器的同名文件抢走激活\n'
+    printf '[D-BUS Service]\n'
+    printf 'Name=org.freedesktop.FileManager1\n'
+    printf 'Exec=%s --filemanager1\n' "$exec_bin"
+  } > "$FM1_USER_SERVICE"
+  grep -qxF "$FM1_USER_SERVICE" "$SERVICES_CREATED_LIST" 2>/dev/null \
+    || printf '%s\n' "$FM1_USER_SERVICE" >> "$SERVICES_CREATED_LIST"
+  echo "[user] $FM1_USER_SERVICE 已写入（FileManager1 冷激活优先本应用）"
+}
+
 # 让 GTK 应用走门户：GTK 的 GtkFileChooserNative 只有在 GTK_USE_PORTAL=1
 # （或沙箱内）时才请求 xdg-desktop-portal，否则直接弹自己的对话框。
 # LocalSend（file_selector_linux）、大量 GTK/Flutter 程序都属于后者。
@@ -405,6 +436,9 @@ user_install() {
     set_portal_preference "$conf"
     echo "[user] ${conf} 已写入 preferred=hoshineko"
   done < <(install_portals_conf_targets)
+
+  # 用户级 FileManager1 激活文件（优先于 /usr/share 同名文件）
+  install_user_fm1_service
 
   # GTK 应用默认绕过门户，必须显式开启 GTK_USE_PORTAL
   install_gtk_portal_env

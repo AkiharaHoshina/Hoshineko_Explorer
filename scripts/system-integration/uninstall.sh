@@ -37,6 +37,9 @@ PORTALS_CREATED_LIST="$PORTALS_CONF_DIR/.hoshineko-portals-created"
 ENV_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/environment.d"
 ENV_CONF="$ENV_DIR/60-hoshineko-portal.conf"
 ENV_CREATED_LIST="$ENV_DIR/.hoshineko-created"
+USER_SERVICES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/dbus-1/services"
+FM1_USER_SERVICE="$USER_SERVICES_DIR/org.freedesktop.FileManager1.service"
+SERVICES_CREATED_LIST="$USER_SERVICES_DIR/.hoshineko-created"
 # 固定安装路径（可经环境变量覆盖：测试沙箱 / 定制安装，与 install.sh 一致）
 SYSTEM_BIN="${HOSHINEKO_SYSTEM_BIN:-/usr/local/bin/HoshinekoFM}"
 USER_BIN="${HOSHINEKO_USER_BIN:-$HOME/.local/bin/HoshinekoFM}"
@@ -276,6 +279,13 @@ user_uninstall() {
     done < "$PORTALS_CREATED_LIST"
     rm -f "$PORTALS_CREATED_LIST"
   fi
+
+  # 用户级 FileManager1 激活文件：只删安装时由我们创建的
+  if [ -f "$SERVICES_CREATED_LIST" ] && grep -qxF "$FM1_USER_SERVICE" "$SERVICES_CREATED_LIST" 2>/dev/null; then
+    rm -f "$FM1_USER_SERVICE"
+    echo "[user] ${FM1_USER_SERVICE} 已删除（安装时新建）"
+  fi
+  rm -f "$SERVICES_CREATED_LIST"
 
   # GTK_USE_PORTAL：只删除安装时由我们创建的文件，用户自建的配置不动
   if [ -f "$ENV_CREATED_LIST" ] && grep -qxF "$ENV_CONF" "$ENV_CREATED_LIST" 2>/dev/null; then

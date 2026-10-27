@@ -109,6 +109,9 @@
     min-height: 0;
     position: relative;
     overflow: hidden;
+    /* 横向手势交给应用翻页：不加这行浏览器会把手势当页面滚动接管，
+       只派发 pointercancel，pointerup 永远不到 */
+    touch-action: pan-y;
     /* 与头部拉开一点距离：第一项紧贴头部时上边缘像被遮挡 */
     padding-top: 8px;
 }
@@ -185,6 +188,30 @@
 
 .sidebar--collapsed .sidebar-partition-info {
     display: none;
+}
+
+/* 收起态：窗口太矮时允许滚动（分页在收起态关闭，只有一页） */
+.sidebar--collapsed .sidebar-body {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--md-sys-color-outline-variant) transparent;
+}
+
+.sidebar--collapsed .sidebar-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar--collapsed .sidebar-body::-webkit-scrollbar-thumb {
+    background-color: var(--md-sys-color-outline-variant);
+    border-radius: 4px;
+}
+
+/* 头部按钮焦点框：内嵌绘制，避免被 40px 行高/容器裁切 */
+.sidebar-header-btn:focus-visible {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: -2px;
+    border-radius: 50%;
 }
 
 .sidebar-list {

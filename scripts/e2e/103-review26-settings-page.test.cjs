@@ -30,7 +30,7 @@ const { ipcMain } = require('electron');
     await h.sleep(600);
 
     await h.openSettingsPage(win);
-    h.assert.strictEqual((await h.js(win, `document.querySelectorAll('.settings-category-card').length`)).value, 11, '根页应有 11 张分类卡片（含内建终端）');
+    h.assert.strictEqual((await h.js(win, `document.querySelectorAll('.settings-category-card').length`)).value, 9, '根页应有 9 张分类卡片（对象面板/内建终端已并入导航）');
 
     // review 29.3：地址栏 → 标题间隔与对象面板完全一致（几何断言——
     // 对象页/设置页的 object-panel-header 顶边与顶栏底边间隙相等）
@@ -89,6 +89,20 @@ const { ipcMain } = require('electron');
     await h.setReactInput(win, '.omnibar.mode-edit .omnibar-input', 'settings://bogus');
     await h.key(win, 'Enter');
     await h.waitFor(win, `!!document.querySelector('.settings-category-grid')`, { timeout: 8000 });
+
+    // 旧分类路径重定向（v3.0.1007）：objects / built-in-terminal / dashboard
+    // → settings://navigation（标签标题显示「设置 · 导航」）
+    for (const legacy of ['settings://objects', 'settings://built-in-terminal', 'settings://dashboard']) {
+      await h.clickEl(win, '.omnibar-trigger');
+      await h.waitFor(win, `!!document.querySelector('.omnibar.mode-edit .omnibar-input')`);
+      await h.setReactInput(win, '.omnibar.mode-edit .omnibar-input', legacy);
+      await h.key(win, 'Enter');
+      await h.waitFor(
+        win,
+        `/设置 · 导航|Settings · Navigation/.test(document.querySelector('.tab-item.active .tab-title')?.textContent ?? '')`,
+        { timeout: 8000 },
+      );
+    }
   });
 
   await h.run('103b Places 设置入口 + 显示仪表盘开关立即生效', async () => {
@@ -131,7 +145,7 @@ const { ipcMain } = require('electron');
     await h.waitFor(win, `!!document.querySelector('.settings-category-grid')`, { timeout: 8000 });
 
     // 显示仪表盘开关关闭 → Places 仪表盘条目消失（导航栏不动）
-    await h.openSettingsPage(win, `/仪表盘|Dashboard/`);
+    await h.openSettingsPage(win, `/导航|Navigation/`);
     await h.waitFor(win, `!!document.querySelector('.settings-row')`, { timeout: 8000 });
     await h.js(win, `(() => {
       const rows = [...document.querySelectorAll('.settings-row')];
@@ -416,7 +430,7 @@ const { ipcMain } = require('electron');
     await h.sleep(600);
 
     // 显示对象面板开关关闭 → Places 对象入口消失
-    await h.openSettingsPage(win, `/对象面板|Object Panel/`);
+    await h.openSettingsPage(win, `/导航|Navigation/`);
     await h.waitFor(win, `!!document.querySelector('.settings-row')`, { timeout: 8000 });
     await h.js(win, `(() => {
       const rows = [...document.querySelectorAll('.settings-row')];
@@ -440,8 +454,8 @@ const { ipcMain } = require('electron');
       return items.some((x) => (x.querySelector('md-icon')?.textContent ?? '') === 'widgets');
     })()`, 8000);
 
-    // 内建终端分类：开关存在；Places 内建终端入口位于设置下方
-    await h.openSettingsPage(win, `/内建终端|Built-in Terminal/`);
+    // 内建终端设置已并入导航页：开关在同一页
+    await h.openSettingsPage(win, `/导航|Navigation/`);
     await h.waitFor(win, `!!document.querySelector('.settings-row')`, { timeout: 8000 });
     const order = await h.js(win, `(() => {
       const items = [...document.querySelectorAll('.sidebar-page[data-active] .sidebar-item')];
@@ -454,6 +468,25 @@ const { ipcMain } = require('electron');
     })()`);
     h.assert.ok(order.value.obj >= 0, '对象面板入口应在 Places 第一部分');
     h.assert.strictEqual(order.value.termIcon, 'terminal', '内建终端入口应为头部 terminal 按钮');
+
+    // 内建终端开关已并入「导航栏」分区（不再有独立分区标题）
+    const merged = await h.js(win, `(() => {
+      const rows = [...document.querySelectorAll('.settings-row')];
+      const termRow = rows.find((r) => /显示内建终端|Show built-in terminal/.test(r.textContent ?? ''));
+      const sensRow = document.querySelector('[data-settings-row="navigation-wheel-sensitivity"]');
+      const sectionOf = (el) => el?.closest('.settings-section')
+        ?.querySelector('.settings-section-header')?.textContent ?? '';
+      return { term: sectionOf(termRow), sens: sectionOf(sensRow) };
+    })()`);
+    h.assert.ok(
+      /导航栏|Navigation bar/.test(merged.value.term),
+      `内建终端开关应在导航栏分区（实际 ${merged.value.term}）`,
+    );
+    h.assert.strictEqual(
+      merged.value.term,
+      merged.value.sens,
+      '内建终端开关与灵敏度滑条应在同一分区',
+    );
 
     // 点击 Places 内建终端入口 → 终端打开 + 深色高亮类
     await h.js(win, `(() => {
@@ -496,7 +529,7 @@ const { ipcMain } = require('electron');
     const win = await h.createTestWindow({ argv: ['electron', dir] });
     await h.waitFor(win, `!!document.querySelector('.file-list-item')`);
     await h.sleep(600);
-    await h.openSettingsPage(win, `/仪表盘|Dashboard/`);
+    await h.openSettingsPage(win, `/导航|Navigation/`);
     await h.waitFor(win, `!!document.querySelector('.settings-row')`, { timeout: 8000 });
 
     const zoneOf = () => h.js(win, `(() => {
@@ -527,10 +560,15 @@ const { ipcMain } = require('electron');
     })()`);
     h.assert.ok(onSecond.value, 'Tab 应停靠到第二个控件（显示主页存储占用开关）');
 
-    // 末控件再 Tab → 放行全局分区循环（files 未注册 → 下一站 nav）
-    await h.key(win, 'Tab');
-    await h.sleep(200);
-    const z = (await zoneOf()).value;
+    // 一直 Tab 到末控件之后 → 放行全局分区循环（导航页控件变多，
+    // 按「离开 settings 分区」判定而非固定步数）
+    let z = 'settings';
+    for (let i = 0; i < 30; i++) {
+      await h.key(win, 'Tab');
+      await h.sleep(100);
+      z = (await zoneOf()).value;
+      if (z !== 'settings') break;
+    }
     h.assert.strictEqual(z, 'sidebar', `末控件 Tab 应放行走全局循环（实际 ${z}）`);
 
     // 方向键：回到设置页内按序移动落点
@@ -562,7 +600,7 @@ const { ipcMain } = require('electron');
     await h.waitFor(win, `!!document.querySelector('.file-list-item')`);
     await h.sleep(600);
     await h.openSettingsPage(win);
-    await h.waitFor(win, `document.querySelectorAll('.settings-category-card').length >= 11`, { timeout: 8000 });
+    await h.waitFor(win, `document.querySelectorAll('.settings-category-card').length >= 9`, { timeout: 8000 });
 
     // 菜单项正则（按 index 断言：打开/固定到侧边栏/固定到仪表盘恰三项）
     const OPEN_RE = /打开|開く|Open/;
@@ -623,18 +661,18 @@ const { ipcMain } = require('electron');
     // ③ 固定到侧边栏 → 条目出现（title = settings://<cat>、图标 = 卡片图标）
     await h.clickEl(win, '[data-kb-zone="topbar-up"] md-icon-button');
     await h.waitFor(win, `!!document.querySelector('.settings-category-grid')`, { timeout: 8000 });
-    await openCardMenu('^(对象面板|Object Panel)$');
+    await openCardMenu('^(导航|Navigation)$');
     await clickMenuItemAt(1);
-    await h.waitFor(win, `!!document.querySelector('.sidebar-item[title="settings://objects"]')`, { timeout: 8000 });
+    await h.waitFor(win, `!!document.querySelector('.sidebar-item[title="settings://navigation"]')`, { timeout: 8000 });
     h.assert.strictEqual(
-      (await h.js(win, `document.querySelector('.sidebar-item[title="settings://objects"] md-icon')?.textContent ?? ''`)).value,
-      'widgets',
-      '固定条目图标应为分类卡片图标（widgets）',
+      (await h.js(win, `document.querySelector('.sidebar-item[title="settings://navigation"] md-icon')?.textContent ?? ''`)).value,
+      'explore',
+      '固定条目图标应为分类卡片图标（explore）',
     );
 
     // ④ 固定条目右键菜单 = 手写三项（打开/重命名/取消固定），无删除/压缩
     await h.js(win, `(() => {
-      const el = document.querySelector('.sidebar-item[title="settings://objects"]');
+      const el = document.querySelector('.sidebar-item[title="settings://navigation"]');
       el?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
       return !!el;
     })()`, true);
@@ -644,19 +682,19 @@ const { ipcMain } = require('electron');
     h.assert.ok(pinLabels.value.every((l) => !DANGER_RE.test(l)), `固定条目菜单不得含删除/压缩（实际：${JSON.stringify(pinLabels.value)}）`);
     h.assert.ok(OPEN_RE.test(pinLabels.value[0]), `固定条目第 0 项应为打开（实际：${pinLabels.value[0]}）`);
 
-    // 固定条目「打开」→ 导航到对象面板分类页
+    // 固定条目「打开」→ 导航到导航分类页
     await clickMenuItemAt(0);
-    await h.waitFor(win, `/设置 · 对象面板|Settings · Object Panel/.test(document.querySelector('.tab-item.active .tab-title')?.textContent ?? '')`, { timeout: 8000 });
+    await h.waitFor(win, `/设置 · 导航|Settings · Navigation/.test(document.querySelector('.tab-item.active .tab-title')?.textContent ?? '')`, { timeout: 8000 });
 
     // ⑤ 固定到仪表盘 → 仪表盘条目出现，点击导航到分类页
     await h.openSettingsPage(win);
-    await h.waitFor(win, `document.querySelectorAll('.settings-category-card').length >= 11`, { timeout: 8000 });
-    await openCardMenu('^(仪表盘|Dashboard)$');
+    await h.waitFor(win, `document.querySelectorAll('.settings-category-card').length >= 9`, { timeout: 8000 });
+    await openCardMenu('^(导航|Navigation)$');
     await clickMenuItemAt(2);
     await h.js(win, `[...document.querySelectorAll('.sidebar-item')].find((x) => x.querySelector('md-icon')?.textContent === 'dashboard')?.click()`, true);
-    await h.waitFor(win, `!!document.querySelector('.pinned-name[title="settings://dashboard"], .pinned-name-marquee[title="settings://dashboard"]')`, { timeout: 8000 });
-    await h.js(win, `document.querySelector('.pinned-name[title="settings://dashboard"], .pinned-name-marquee[title="settings://dashboard"]')?.closest('.pinned-item')?.click()`, true);
-    await h.waitFor(win, `/设置 · 仪表盘|Settings · Dashboard/.test(document.querySelector('.tab-item.active .tab-title')?.textContent ?? '')`, { timeout: 8000 });
+    await h.waitFor(win, `!!document.querySelector('.pinned-name[title="settings://navigation"], .pinned-name-marquee[title="settings://navigation"]')`, { timeout: 8000 });
+    await h.js(win, `document.querySelector('.pinned-name[title="settings://navigation"], .pinned-name-marquee[title="settings://navigation"]')?.closest('.pinned-item')?.click()`, true);
+    await h.waitFor(win, `/设置 · 导航|Settings · Navigation/.test(document.querySelector('.tab-item.active .tab-title')?.textContent ?? '')`, { timeout: 8000 });
   });
 
   await h.run('103k 设置搜索（分组结构/加亮/深链接/空词全量/类内搜索/标题）', async () => {
@@ -712,7 +750,32 @@ const { ipcMain } = require('electron');
     const focusRowId = await h.js(win, `document.querySelector('.settings-page .settings-row--search-focus')?.getAttribute('data-settings-row') ?? ''`);
     h.assert.strictEqual(focusRowId.value, 'files-show-hidden', `深链接应定位到 files-show-hidden 行（实际 ${focusRowId.value}）`);
 
-    // ③ 空词 = 显示全部设置项（索引 33 项全量）
+    // ③ 合并后的分类仍可搜索：导航滑条 + 原对象面板/内建终端设置
+    await h.openSettingsPage(win);
+    await h.searchViaOmnibar(win, '灵敏度');
+    await h.waitFor(win, `!!document.querySelector('.settings-page .object-search-results')`, 8000);
+    const sensHit = await h.js(win, `(() => {
+      const hit = [...document.querySelectorAll('.settings-page .object-search-hit')]
+        .find((x) => x.dataset.rowId === 'navigation-wheel-sensitivity');
+      const group = hit?.closest('.object-search-group')?.querySelector('.object-search-group-title')?.textContent ?? '';
+      return { found: !!hit, group };
+    })()`);
+    h.assert.ok(sensHit.value.found, '「灵敏度」应命中导航栏翻页灵敏度滑条');
+    h.assert.ok(
+      /导航|Navigation/.test(sensHit.value.group),
+      `命中项应归在导航分类下（实际 ${sensHit.value.group}）`,
+    );
+
+    await h.openSettingsPage(win);
+    await h.searchViaOmnibar(win, '内建终端');
+    await h.waitFor(win, `!!document.querySelector('.settings-page .object-search-results')`, 8000);
+    const termHit = await h.js(win, `(() => ({
+      found: [...document.querySelectorAll('.settings-page .object-search-hit')]
+        .some((x) => x.dataset.rowId === 'terminal-show-place'),
+    }))()`);
+    h.assert.ok(termHit.value.found, '合并后「内建终端」设置仍应可被搜索命中');
+
+    // ④ 空词 = 显示全部设置项（索引 34 项全量）
     await h.openSettingsPage(win);
     await h.searchViaOmnibar(win, '');
     await h.waitFor(win, `!!document.querySelector('.settings-page .object-search-results')`, 8000);

@@ -1,6 +1,8 @@
 import { app, BrowserWindow } from 'electron';
 import dbus from 'dbus-next';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
 import { BACKEND_VERSION_PROPERTY } from './backendInfo';
 
 /**
@@ -97,6 +99,35 @@ async function queryOwnerPid(bus: dbus.MessageBus, owner: string): Promise<numbe
 }
 
 /**
+ * 判断本机默认文件管理器是否为 Hoshineko（`inode/directory=HoshinekoFM.desktop`）。
+ * 用于总线名接管决策：只有用户把我们设为默认文件管理器时，才抢占被
+ * 其他文件管理器（如 Dux Files）持有的 org.freedesktop.FileManager1。
+ *
+ * @returns 默认处理器是 HoshinekoFM.desktop 时为 true；读取失败按 false
+ */
+function isDefaultFileManager(): boolean {
+  const home = os.homedir();
+  const configHome = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
+  const dataHome = process.env.XDG_DATA_HOME || path.join(home, '.local', 'share');
+  const files = [
+    path.join(configHome, 'mimeapps.list'),
+    path.join(dataHome, 'applications', 'mimeapps.list'),
+  ];
+  for (const file of files) {
+    try {
+      const content = fs.readFileSync(file, 'utf-8');
+      for (const line of content.split('\n')) {
+        const m = /^inode\/directory=([^\s;]+)/.exec(line.trim());
+        if (m) return m[1] === 'HoshinekoFM.desktop';
+      }
+    } catch {
+      // 文件不存在/不可读：继续看下一个
+    }
+  }
+  return false;
+}
+
+/**
  * 注册 FileManager1 后端。
  * 会话总线不可用、总线名被占用时返回 false 并输出 console.error
  * （含占名者 owner，便于 5 秒内定位冲突）。
@@ -127,7 +158,8 @@ export async function setupFileManager1(
   try {
     // RequestNameReply.PrimaryOwner = 1（按 D-Bus 规范常量比对）
     const reply = await bus.requestName(busName, dbus.NameFlag.DO_NOT_QUEUE);
-    if (reply !== 1) {
+    let acquired = reply === 1;
+    if (!acquired) {
       const owner = await queryNameOwner(bus, busName);
       // 名字被本进程既有连接持有（安装/重装成功后重新注册时常见）：
       // 视为注册成功——旧连接仍在服务、名字照常应答，继续使用即可；
@@ -136,13 +168,31 @@ export async function setupFileManager1(
         bus.disconnect();
         return true;
       }
-      console.error(
-        `[fm1] 总线名 ${busName} 注册失败：已被占用${owner ? `（owner: ${owner}）` : ''}。` +
-        '占名者可能是旧常驻服务进程（--filemanager1）或另一文件管理器实例——' +
-        '若刚升级/重装，请确认旧进程已退出（或重跑系统集成安装以清理旧常驻）。',
-      );
-      bus.disconnect();
-      return false;
+      // 默认文件管理器是本应用时接管名字：Dux Files 等同样注册
+      // org.freedesktop.FileManager1，先到先得会让 Firefox 等应用的
+      // 「在文件夹中显示」被对方接走。REPLACE_EXISTING 仅在此身份下使用。
+      if (isDefaultFileManager()) {
+        try {
+          const take = await bus.requestName(busName, dbus.NameFlag.REPLACE_EXISTING);
+          if (take === 1) {
+            acquired = true;
+            console.warn(
+              `[fm1] 已接管 ${busName}（原持有者 ${owner ?? '未知'}；本应用为默认文件管理器）`,
+            );
+          }
+        } catch {
+          // 接管失败：按原冲突流程处理
+        }
+      }
+      if (!acquired) {
+        console.error(
+          `[fm1] 总线名 ${busName} 注册失败：已被占用${owner ? `（owner: ${owner}）` : ''}。` +
+          '占名者可能是旧常驻服务进程（--filemanager1）或另一文件管理器实例——' +
+          '若刚升级/重装，请确认旧进程已退出（或重跑系统集成安装以清理旧常驻）。',
+        );
+        bus.disconnect();
+        return false;
+      }
     }
   } catch (e) {
     console.error(`[fm1] 总线名 ${busName} 注册异常：${(e as Error)?.message ?? e}`);

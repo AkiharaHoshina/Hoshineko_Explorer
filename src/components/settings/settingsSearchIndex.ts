@@ -33,9 +33,11 @@ export interface SettingsSearchEntry {
 
 /** 设置搜索索引表（序 = 分类页行序；新增设置项须在此登记一行） */
 export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
-  // ── 仪表盘 ──
-  { rowId: 'dashboard-show-dashboard', cat: 'dashboard', section: 'settings.cat_dashboard', labelKey: 'settings.show_dashboard', icon: 'dashboard', keywords: ['显示仪表盘', 'show dashboard'] },
-  { rowId: 'dashboard-show-home-storage', cat: 'dashboard', section: 'settings.cat_dashboard', labelKey: 'settings.show_home_storage', icon: 'home', keywords: ['主页存储占用', 'storage', '磁盘占用'] },
+  // ── 导航：仪表盘分区 ──
+  { rowId: 'dashboard-show-dashboard', cat: 'navigation', section: 'settings.cat_dashboard', labelKey: 'settings.show_dashboard', icon: 'dashboard', keywords: ['显示仪表盘', 'show dashboard'] },
+  { rowId: 'dashboard-show-home-storage', cat: 'navigation', section: 'settings.cat_dashboard', labelKey: 'settings.show_home_storage', icon: 'home', keywords: ['主页存储占用', 'storage', '磁盘占用'] },
+  // ── 导航：导航栏分区 ──
+  { rowId: 'navigation-wheel-sensitivity', cat: 'navigation', section: 'settings.nav_section', labelKey: 'settings.nav_wheel_sensitivity', subKey: 'settings.nav_wheel_sensitivity_desc', icon: 'tune', keywords: ['翻页', '滚动', '滚轮', '灵敏度', '侧边栏', 'paging', 'wheel', 'sensitivity', 'scroll'] },
   // ── 文件 ──
   { rowId: 'files-show-hidden', cat: 'files', section: 'settings.appearance', labelKey: 'settings.show_hidden', icon: 'visibility', keywords: ['隐藏文件', 'hidden'] },
   { rowId: 'files-view-mode', cat: 'files', section: 'settings.appearance', labelKey: 'settings.view_mode', icon: 'grid_view', keywords: ['视图', '列表', '网格', 'list', 'grid'] },
@@ -58,11 +60,11 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { rowId: 'search-limit', cat: 'search', section: null, labelKey: 'settings.search_limit', icon: 'filter_list', keywords: ['结果上限', 'limit'] },
   { rowId: 'search-timeout', cat: 'search', section: null, labelKey: 'settings.search_timeout', icon: 'timer', keywords: ['超时', 'timeout'] },
   { rowId: 'search-recent-count', cat: 'search', section: null, labelKey: 'settings.search_recent_count', icon: 'history', keywords: ['搜索历史', '最近搜索', '历史', 'history'] },
-  // ── 对象面板 ──
-  { rowId: 'objects-show-objects', cat: 'objects', section: null, labelKey: 'settings.show_objects', icon: 'widgets', keywords: ['对象面板入口', 'objects'] },
-  { rowId: 'objects-sparkline-window', cat: 'objects', section: null, labelKey: 'settings.sparkline_window', icon: 'show_chart', keywords: ['走势图', '图表', 'sparkline'] },
-  { rowId: 'objects-alert-temp', cat: 'objects', section: null, labelKey: 'settings.object_alert_temp', icon: 'thermostat', keywords: ['温度告警', '警报', 'temperature'] },
-  { rowId: 'objects-alert-disk', cat: 'objects', section: null, labelKey: 'settings.object_alert_disk', icon: 'hard_drive', keywords: ['磁盘告警', '警报', 'disk'] },
+  // ── 导航：对象面板分区 ──
+  { rowId: 'objects-show-objects', cat: 'navigation', section: 'settings.cat_objects', labelKey: 'settings.show_objects', icon: 'widgets', keywords: ['对象面板入口', 'objects'] },
+  { rowId: 'objects-sparkline-window', cat: 'navigation', section: 'settings.cat_objects', labelKey: 'settings.sparkline_window', icon: 'show_chart', keywords: ['走势图', '图表', 'sparkline'] },
+  { rowId: 'objects-alert-temp', cat: 'navigation', section: 'settings.cat_objects', labelKey: 'settings.object_alert_temp', icon: 'thermostat', keywords: ['温度告警', '警报', 'temperature'] },
+  { rowId: 'objects-alert-disk', cat: 'navigation', section: 'settings.cat_objects', labelKey: 'settings.object_alert_disk', icon: 'hard_drive', keywords: ['磁盘告警', '警报', 'disk'] },
   // ── 系统集成 ──
   { rowId: 'portal-default-file-manager', cat: 'portal', section: null, labelKey: 'settings.default_file_manager', icon: 'folder_shared', keywords: ['设为默认', '默认文件管理器'] },
   { rowId: 'portal-system-integration', cat: 'portal', section: null, labelKey: 'settings.system_integration', icon: 'widgets', keywords: ['portal', '安装', '卸载', '集成', 'integration'] },
@@ -74,8 +76,8 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { rowId: 'i18n-language', cat: 'i18n', section: null, labelKey: 'settings.language', icon: 'translate', keywords: ['语言', 'language', 'locale'] },
   // ── 默认设置 ──
   { rowId: 'defaults-restore', cat: 'defaultrecovery', section: null, labelKey: 'settings.restore_defaults', subKey: 'settings.restore_defaults_desc', icon: 'restart_alt', keywords: ['恢复默认', '重置', '默认配置', 'reset'] },
-  // ── 内建终端 ──
-  { rowId: 'terminal-show-place', cat: 'built-in-terminal', section: null, labelKey: 'settings.show_terminal_place', icon: 'terminal', keywords: ['内建终端入口', '终端', 'terminal'] },
+  // ── 导航：导航栏分区（内建终端开关已并入） ──
+  { rowId: 'terminal-show-place', cat: 'navigation', section: 'settings.nav_section', labelKey: 'settings.show_terminal_place', icon: 'terminal', keywords: ['内建终端入口', '终端', 'terminal'] },
 ];
 
 /** 单条命中（已翻译的显示文案 + 索引项） */

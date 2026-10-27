@@ -1024,6 +1024,12 @@ function AppContent() {
     true,
   );
 
+  /** Places 滚轮翻页灵敏度（百分比 50–500，默认 100＝原有手感） */
+  const [sidebarWheelSensitivity, setSidebarWheelSensitivity] = useLocalStorage<number>(
+    "settings.sidebarWheelSensitivity",
+    100,
+  );
+
   /** 文件预览面板开关（默认关闭，设置 → 行为；确定时生效） */
   const [filePreviewEnabled, setFilePreviewEnabled] = useLocalStorage<boolean>(
     "settings.filePreview",
@@ -1781,6 +1787,7 @@ function AppContent() {
     setShowDashboard(true);
     setShowObjects(true);
     setShowTerminalPlace(true);
+    setSidebarWheelSensitivity(100);
   }, [
     handleLocaleChange,
     setShowHiddenFiles,
@@ -1811,6 +1818,7 @@ function AppContent() {
     setShowDashboard,
     setShowObjects,
     setShowTerminalPlace,
+    setSidebarWheelSensitivity,
   ]);
 
   const hasInitialized = useRef(false);
@@ -2759,6 +2767,8 @@ function AppContent() {
         removeEntry,
         showTerminalPlace,
         setShowTerminalPlace,
+        sidebarWheelSensitivity,
+        setSidebarWheelSensitivity,
         locale,
         setLocale: handleLocaleChange,
         restoreDefaults: handleRestoreDefaults,
@@ -2803,6 +2813,7 @@ function AppContent() {
             showTerminalPlace={showTerminalPlace}
             terminalOpen={terminalOpen}
             onToggleTerminal={toggleTerminal}
+            wheelSensitivity={sidebarWheelSensitivity}
           />
 
           <main className="main-content">

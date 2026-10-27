@@ -176,7 +176,56 @@ const h = require('./harness.cjs');
     );
     h.assert.strictEqual(afterV.value, beforeV.value, '触控板垂直滚动不应翻页');
 
+    // ── 触摸横向滑动翻页（Pointer Events，跟手位移后松手翻页） ──
+    await h.js(win, `document.querySelectorAll('.sidebar-dot')[0].click(); true`);
+    await h.sleep(400);
+    const touchRes = await h.js(win, `(() => {
+      const body = document.querySelector('.sidebar-body');
+      const before = [...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active'));
+      const fire = (type, x) => body.dispatchEvent(new PointerEvent(type, {
+        pointerType: 'touch', pointerId: 99, clientX: x, clientY: 300,
+        bubbles: true, cancelable: true,
+      }));
+      fire('pointerdown', 600);
+      fire('pointermove', 540);
+      const page = document.querySelector('.sidebar-page[data-active]');
+      const dragging = page.style.transform;
+      fire('pointerup', 520);
+      return { before, dragging };
+    })()`);
+    h.assert.ok(
+      /translateX\(-\d+px\)/.test(touchRes.value.dragging),
+      `触摸拖动应跟手位移（实际 ${touchRes.value.dragging}）`,
+    );
+    await h.waitFor(
+      win,
+      `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active')) > ${touchRes.value.before}`,
+      { timeout: 4000 },
+    );
+    const touchAction = await h.js(
+      win,
+      `getComputedStyle(document.querySelector('.sidebar-body')).touchAction`,
+    );
+    h.assert.strictEqual(touchAction.value, 'pan-y', '触摸横向手势应交给应用处理（touch-action: pan-y）');
+
+    // ── 标签条不提升层级（对话框遮罩必须盖住它） ──
+    const tabZ = await h.js(
+      win,
+      `(() => {
+        const cs = getComputedStyle(document.querySelector('.tab-header-bar'));
+        return { z: cs.zIndex, pos: cs.position };
+      })()`,
+    );
+    h.assert.ok(
+      tabZ.value.z === 'auto' || tabZ.value.z === '0',
+      `标签条不应脱离遮罩层级（z-index=${tabZ.value.z}）`,
+    );
+
     // ── 收起：图标轨道 ──
+    const idxBeforeCollapse = await h.js(
+      win,
+      `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active'))`,
+    );
     await h.js(win, `document.querySelector('.sidebar-collapse-btn').click(); true`);
     await h.waitFor(win, `!!document.querySelector('.sidebar--collapsed')`, { timeout: 4000 });
     await h.sleep(300); // 等 180ms 宽度过渡结束
@@ -224,6 +273,25 @@ const h = require('./harness.cjs');
       `收起态按钮图标应与图标列居中（差 ${Math.round(collapsedAlign.value.btn - collapsedAlign.value.item)}px）`,
     );
 
+    // 收起态滚轮不改变当前页（用户定案）：滚两次后展开应仍是收起前的页
+    await h.js(
+      win,
+      `(() => {
+        const body = document.querySelector('.sidebar-body');
+        const fire = () => body.dispatchEvent(
+          new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }),
+        );
+        fire();
+        setTimeout(fire, 350);
+        return true;
+      })()`,
+    );
+    await h.sleep(800);
+
+    // 收起态只有一页（不分页），窗口太矮时靠滚动
+    const collapsedPageCount = await h.js(win, `document.querySelectorAll('.sidebar-page').length`);
+    h.assert.strictEqual(collapsedPageCount.value, 1, '收起态应为单页（不切页）');
+
     const collapsedHasPin = await h.js(
       win,
       `!!document.querySelector('.sidebar-page[data-active] .sidebar-pin-label')`,
@@ -240,10 +308,183 @@ const h = require('./harness.cjs');
     }))()`);
     // box-sizing: content-box：200 内容宽 + 左右各 16 padding = 232 实际宽
     h.assert.strictEqual(expanded.value.width, 232, '恢复后应回到展开态宽度（232px）');
+    const idxAfterExpand = await h.js(
+      win,
+      `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active'))`,
+    );
+    h.assert.strictEqual(
+      idxAfterExpand.value,
+      idxBeforeCollapse.value,
+      '收起期间滚轮不应改变当前页（展开后应回到收起前的页）',
+    );
     h.assert.strictEqual(expanded.value.dotCount, layout.value.pageCount, '恢复后圆点应重新显示');
 
-    // 清理：清掉固定项，避免污染后续用例
-    await h.js(win, `localStorage.removeItem('sidebar.pinned'); true`);
+    // ── 循环翻页（滚轮/触控板/键盘都循环） ──
+    const pageState = () => h.js(
+      win,
+      `(() => {
+        const pages = [...document.querySelectorAll('.sidebar-page')];
+        return { idx: pages.findIndex((p) => p.hasAttribute('data-active')), count: pages.length };
+      })()`,
+    );
+    const wheelY = async (dy) => {
+      await h.js(
+        win,
+        `document.querySelector('.sidebar-body').dispatchEvent(
+          new WheelEvent('wheel', { deltaY: ${dy}, bubbles: true, cancelable: true })
+        ); true`,
+      );
+    };
+    const pageCountTotal = (await pageState()).value.count;
+
+    // 末页继续向下 → 回到第一页
+    await h.js(win, `(() => {
+      const dots = document.querySelectorAll('.sidebar-dot');
+      dots[dots.length - 1]?.click();
+      return true;
+    })()`);
+    await h.sleep(400);
+    await wheelY(120);
+    await h.waitFor(
+      win,
+      `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active')) === 0`,
+      { timeout: 4000 },
+    );
+
+    // 首页继续向上 → 回到末页
+    await h.sleep(400);
+    await wheelY(-120);
+    await h.waitFor(
+      win,
+      `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active')) === ${pageCountTotal - 1}`,
+      { timeout: 4000 },
+    );
+
+    // 键盘：首页第一条上 ↑ → 末页最后一条
+    await h.sleep(400);
+    await h.js(win, `document.querySelectorAll('.sidebar-dot')[0]?.click(); true`);
+    await h.sleep(400);
+    await h.js(
+      win,
+      `document.querySelector('.sidebar-page[data-active] .sidebar-item')?.focus(); true`,
+    );
+    await h.key(win, 'Up');
+    await h.sleep(400);
+    const kbWrap = await h.js(win, `(() => {
+      const pages = [...document.querySelectorAll('.sidebar-page')];
+      const idx = pages.findIndex((p) => p.hasAttribute('data-active'));
+      const items = [...pages[idx].querySelectorAll('.sidebar-item')];
+      return { idx, onLast: document.activeElement === items[items.length - 1] };
+    })()`);
+    h.assert.strictEqual(kbWrap.value.idx, pageCountTotal - 1, '首页第一条按 ↑ 应循环到末页');
+    h.assert.ok(kbWrap.value.onLast, '循环到末页后焦点应落在该页最后一条');
+
+    // ── 滚轮灵敏度设置 ──
+    // 300%：横向 30px 即翻页（阈值 48/3=16）
+    await h.js(win, `localStorage.setItem('settings.sidebarWheelSensitivity', '300'); true`);
+    win.webContents.reload();
+    await h.waitFor(win, `document.querySelectorAll('.sidebar-pin-label').length === 25`, { timeout: 8000 });
+    await h.sleep(600);
+    await h.js(win, `document.querySelectorAll('.sidebar-dot')[0].click(); true`);
+    await h.sleep(400);
+    await h.js(
+      win,
+      `document.querySelector('.sidebar-body').dispatchEvent(
+        new WheelEvent('wheel', { deltaX: 30, deltaY: 0, bubbles: true, cancelable: true })
+      ); true`,
+    );
+    await h.waitFor(
+      win,
+      `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active')) === 1`,
+      { timeout: 4000 },
+    );
+
+    // 50%：同样的 30px 不翻页（阈值 96）
+    await h.js(win, `localStorage.setItem('settings.sidebarWheelSensitivity', '50'); true`);
+    win.webContents.reload();
+    await h.waitFor(win, `document.querySelectorAll('.sidebar-pin-label').length === 25`, { timeout: 8000 });
+    await h.sleep(600);
+    await h.js(win, `document.querySelectorAll('.sidebar-dot')[0]?.click(); true`);
+    await h.sleep(400);
+    await h.js(
+      win,
+      `document.querySelector('.sidebar-body').dispatchEvent(
+        new WheelEvent('wheel', { deltaX: 30, deltaY: 0, bubbles: true, cancelable: true })
+      ); true`,
+    );
+    await h.sleep(500);
+    const idxLowSens = await h.js(
+      win,
+      `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active'))`,
+    );
+    h.assert.strictEqual(idxLowSens.value, 0, '灵敏度 50% 时 30px 位移不应翻页');
+
+    // 鼠标档位：50% 需两格（阈值 200）；一格 120 不翻页
+    await h.js(
+      win,
+      `document.querySelector('.sidebar-body').dispatchEvent(
+        new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true })
+      ); true`,
+    );
+    await h.sleep(500);
+    const idxLowMouse = await h.js(
+      win,
+      `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active'))`,
+    );
+    h.assert.strictEqual(idxLowMouse.value, 0, '灵敏度 50% 时一格滚轮不应翻页（需两格）');
+
+    // 300%：一格即翻页（阈值 33）
+    await h.js(win, `localStorage.setItem('settings.sidebarWheelSensitivity', '300'); true`);
+    win.webContents.reload();
+    await h.waitFor(win, `document.querySelectorAll('.sidebar-pin-label').length === 25`, { timeout: 8000 });
+    await h.sleep(600);
+    await h.js(win, `document.querySelectorAll('.sidebar-dot')[0]?.click(); true`);
+    await h.sleep(400);
+    await h.js(
+      win,
+      `document.querySelector('.sidebar-body').dispatchEvent(
+        new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true })
+      ); true`,
+    );
+    await h.waitFor(
+      win,
+      `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active')) === 1`,
+      { timeout: 4000 },
+    );
+
+    // ── 收起态窗口太矮：滚动而非分页 ──
+    await h.js(win, `document.querySelector('.sidebar-collapse-btn')?.click(); true`);
+    await h.waitFor(win, `!!document.querySelector('.sidebar--collapsed')`, { timeout: 4000 });
+    win.setContentSize(1000, 420);
+    await h.sleep(500);
+    const scrollInfo = await h.js(win, `(() => {
+      const body = document.querySelector('.sidebar-body');
+      return { sh: body.scrollHeight, ch: body.clientHeight, top: body.scrollTop };
+    })()`);
+    h.assert.ok(
+      scrollInfo.value.sh > scrollInfo.value.ch,
+      `矮窗口下收起态内容应溢出可滚动（scrollHeight ${scrollInfo.value.sh} / clientHeight ${scrollInfo.value.ch}）`,
+    );
+    // 键盘焦点走到底 → 容器自动滚动
+    await h.js(
+      win,
+      `(() => {
+        const items = [...document.querySelectorAll('.sidebar-page[data-active] .sidebar-item')];
+        items[items.length - 1]?.focus();
+        return true;
+      })()`,
+    );
+    await h.sleep(400);
+    const scrolledTop = await h.js(win, `document.querySelector('.sidebar-body').scrollTop`);
+    h.assert.ok(scrolledTop.value > 0, `焦点到末条后应滚动（scrollTop ${scrolledTop.value}）`);
+    win.setContentSize(1280, 800);
+    await h.sleep(300);
+    await h.js(win, `document.querySelector('.sidebar-collapse-btn')?.click(); true`);
+    await h.waitFor(win, `!document.querySelector('.sidebar--collapsed')`, { timeout: 4000 });
+    await h.sleep(300);
+
+    // 清理：清掉固定项与灵敏度，避免污染后续用例
+    await h.js(win, `localStorage.removeItem('sidebar.pinned'); localStorage.removeItem('settings.sidebarWheelSensitivity'); true`);
   });
 
   h.finish();

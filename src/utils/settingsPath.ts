@@ -25,18 +25,32 @@ export interface SettingsCategory {
 
 /** 设置分类表（根页卡片序 = 数组序） */
 export const SETTINGS_CATEGORIES: SettingsCategory[] = [
-  { id: 'dashboard', labelKey: 'settings.cat_dashboard', icon: 'dashboard', count: 2 },
+  // 导航（v3.0.1007 起）：原「仪表盘」分类并入；内建终端与对象面板的
+  // 设置项移入本页作为分区，旧路径经 LEGACY_CAT_ALIASES 重定向
+  { id: 'navigation', labelKey: 'settings.cat_navigation', icon: 'explore', count: 8 },
   { id: 'files', labelKey: 'settings.cat_files', icon: 'folder', count: 9 },
   { id: 'display', labelKey: 'settings.cat_display', icon: 'palette', count: 3 },
   { id: 'search', labelKey: 'settings.cat_search', icon: 'search', count: 4 },
-  { id: 'objects', labelKey: 'settings.cat_objects', icon: 'widgets', count: 4 },
   { id: 'portal', labelKey: 'settings.cat_portal', icon: 'integration_instructions', count: 3 },
   { id: 'shortcut', labelKey: 'settings.cat_shortcut', icon: 'bolt', count: 2 },
-  { id: 'built-in-terminal', labelKey: 'settings.cat_terminal', icon: 'terminal', count: 1 },
   { id: 'i18n', labelKey: 'settings.cat_i18n', icon: 'translate', count: 1 },
   { id: 'defaultrecovery', labelKey: 'settings.cat_defaults', icon: 'restart_alt', count: 1 },
   { id: 'about', labelKey: 'settings.cat_about', icon: 'info', count: 2 },
 ];
+
+/**
+ * 已合并分类的旧 id → 新 id（v3.0.1007）：
+ * - dashboard（仪表盘）→ navigation
+ * - objects（对象面板）→ navigation（设置项已移入导航页分区）
+ * - built-in-terminal（内建终端）→ navigation（同上）
+ * 解析时别名归一：旧链接/固定项/搜索历史仍可打开，`?focus=` 深链接
+ * 保留（目标行仍在导航页内，rowId 不变）。
+ */
+const LEGACY_CAT_ALIASES: Record<string, string> = {
+  dashboard: 'navigation',
+  objects: 'navigation',
+  'built-in-terminal': 'navigation',
+};
 
 /** 二级子页（cat → 子页 id → 标题 i18n 键）——目前仅 display/theme */
 export const SETTINGS_SUBPAGES: Record<string, { id: string; labelKey: string }[]> = {
@@ -101,7 +115,8 @@ export function parseSettingsPath(p: string): ParsedSettingsPath | null {
     }
   }
   if (segs.length === 0) return { cat: null, sub: null, focus };
-  const cat = SETTINGS_CATEGORIES.find((c) => c.id === segs[0]);
+  const segCat = LEGACY_CAT_ALIASES[segs[0]] ?? segs[0];
+  const cat = SETTINGS_CATEGORIES.find((c) => c.id === segCat);
   if (!cat) return { cat: null, sub: null, focus };
   if (segs.length === 1) return { cat: cat.id, sub: null, focus };
   const subs = SETTINGS_SUBPAGES[cat.id] ?? [];

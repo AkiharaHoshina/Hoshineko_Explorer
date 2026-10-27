@@ -16,18 +16,16 @@ import { searchSettings, settingsSearchTotal } from './settingsSearchIndex';
 import { registerKeyboardZone, focusKeyboardTarget } from '../../utils/focusZones';
 import { gridNavIndex, type GridNavKey } from '../../utils/gridNav';
 import {
-  DashboardSettings,
+  NavigationSettings,
   FilesSettings,
   DisplaySettings,
   ThemeSettings,
   SearchSettings,
-  ObjectsSettings,
   PortalSettings,
   ShortcutSettings,
   I18nSettings,
   DefaultsSettings,
   AboutSettings,
-  BuiltInTerminalSettings,
 } from './SettingsCategoryPages';
 // 设置页复用对象面板的 .object-panel-header/.object-panel-title/
 // .object-search-* 类；ObjectPanel 现在是懒加载组件，它的 CSS 只在对象页
@@ -455,20 +453,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ path, isActive, onNa
   /** 分类页渲染（按分类 id 分派） */
   const renderCategory = (cat: string) => {
     switch (cat) {
-    case 'dashboard': return <DashboardSettings />;
+    case 'navigation': return <NavigationSettings />;
     case 'files': return <FilesSettings />;
     case 'display':
       return parsed?.sub === 'theme'
         ? <ThemeSettings />
         : <DisplaySettings onNavigate={onNavigate} />;
     case 'search': return <SearchSettings />;
-    case 'objects': return <ObjectsSettings />;
     case 'portal': return <PortalSettings />;
     case 'shortcut': return <ShortcutSettings />;
     case 'i18n': return <I18nSettings />;
     case 'defaultrecovery': return <DefaultsSettings />;
     case 'about': return <AboutSettings />;
-    case 'built-in-terminal': return <BuiltInTerminalSettings />;
     default: return null;
     }
   };

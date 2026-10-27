@@ -49,6 +49,61 @@ export const DashboardSettings: React.FC = () => {
   );
 };
 
+// ── 导航（settings://navigation，v3.0.1007） ──
+// 原「仪表盘」分类改名为导航；内建终端、对象面板两个分类的设置项移入
+// 本页作为分区（旧路径 settings://objects、settings://built-in-terminal
+// 经 settingsPath 的 LEGACY_CAT_ALIASES 重定向到这里）。
+
+export const NavigationSettings: React.FC = () => (
+  <>
+    <DashboardSettings />
+    {/* 导航栏：滚轮灵敏度 + 内建终端入口开关（v3.0.1007 起合并） */}
+    <SettingsSection title={t('settings.nav_section')}>
+      <WheelSensitivityRow />
+      <BuiltInTerminalSettings />
+    </SettingsSection>
+    <SettingsSection title={t('settings.cat_objects')}>
+      <ObjectsSettings />
+    </SettingsSection>
+  </>
+);
+
+/** 导航栏滚轮翻页灵敏度（松手生效；拖动中命令式更新数值标签——
+ *  与图标大小/界面缩放行同款，避免受控重渲染造成滑块抖动） */
+const WheelSensitivityRow: React.FC = () => {
+  const s = useSettings();
+  const valueRef = useRef<HTMLSpanElement | null>(null);
+  const fmt = (v: number) => `${(v / 100).toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}×`;
+  return (
+    <div className="settings-icon-size settings-nav-sensitivity" data-settings-row="navigation-wheel-sensitivity">
+      <div className="settings-icon-size__header">
+        <span>{t('settings.nav_wheel_sensitivity')}</span>
+        <span ref={valueRef} className="settings-icon-size__value">
+          {fmt(s.sidebarWheelSensitivity)}
+        </span>
+      </div>
+      <div className="settings-row__sub settings-row__sub--wrap">
+        {t('settings.nav_wheel_sensitivity_desc')}
+      </div>
+      <Slider
+        min={50}
+        max={500}
+        step={10}
+        value={s.sidebarWheelSensitivity}
+        onInput={(e) => {
+          if (valueRef.current) {
+            valueRef.current.textContent = fmt(Number((e.target as HTMLInputElement).value));
+          }
+        }}
+        onChange={(e) => {
+          s.setSidebarWheelSensitivity(Number((e.target as HTMLInputElement).value));
+        }}
+        style={{ width: '100%' }}
+      />
+    </div>
+  );
+};
+
 // ── 文件（settings://files） ──
 
 export const FilesSettings: React.FC = () => {
