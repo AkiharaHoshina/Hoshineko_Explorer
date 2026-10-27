@@ -1,5 +1,18 @@
 # 更新日志
 
+## v3.0.1009 — 修复安装导致 Portal 完全失效（SIGBUS）
+
+- 版本号升至 `3.0.1009`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1009.AppImage` / `HoshinekoFM-3.0.1009-size.AppImage`。
+- **根因**：安装脚本用 `install`/`cp` 直接覆盖 `/usr/local/bin/HoshinekoFM`
+  会截断原 inode；正在运行的 AppImage 进程或安装瞬间被 D-Bus 激活的
+  portal 后端 mmap 到被截断的文件立刻 **SIGBUS**，xdg-desktop-portal 日志
+  报 `Activated service ... received signal 7`，随后 FileChooser 接口整体
+  消失——所有应用的文件选择器失效。
+- **修复**：全部安装改为同目录临时文件 + rename 的原子替换（源与目标相同
+  时跳过重写）；portal 重启后主动检查 `FileChooser` 接口，失败时给出
+  `reset-failed` + `restart` 的修复命令。
+
 ## v3.0.1008 — Places 交互细节
 
 - 版本号升至 `3.0.1008`；AppImage 产物名变为

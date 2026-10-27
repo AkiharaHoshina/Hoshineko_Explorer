@@ -93,6 +93,27 @@ const path = require('path');
     h.assert.ok(/Name=org\.freedesktop\.FileManager1/m.test(fm1Content), 'FileManager1 名应正确');
     h.assert.ok(/--filemanager1/.test(fm1Content), 'Exec 应带 --filemanager1');
 
+    // 原子安装：二进制相同则跳过重写（直接截断原 inode 会让运行中的
+    // AppImage 进程 / portal 后端 SIGBUS —— v3.0.1009 修复）
+    const atomHome = h.tempDir('hoshineko-e2e-atomic-');
+    const atomApp = path.join(h.tempDir('hoshineko-e2e-atomic-app-'), 'HoshinekoFM');
+    fs.writeFileSync(atomApp, '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(atomApp, 0o755);
+    const atomEnv = {
+      HOME: atomHome,
+      APPIMAGE: atomApp,
+      HOSHINEKO_SYSTEM_BIN: path.join(atomHome, 'no-such-bin'),
+    };
+    h.assert.strictEqual(run(scriptPath, atomEnv).status, 0, '原子安装首次运行应成功');
+    const atomUserBin = path.join(atomHome, '.local', 'bin', 'HoshinekoFM');
+    const ino1 = fs.statSync(atomUserBin).ino;
+    h.assert.strictEqual(run(scriptPath, atomEnv).status, 0, '原子安装二次运行应成功');
+    h.assert.strictEqual(
+      fs.statSync(atomUserBin).ino,
+      ino1,
+      '二进制相同应跳过重写（inode 不变，避免截断运行中进程触发 SIGBUS）',
+    );
+
     // 幂等：二次运行不重复追加
     const r2 = run(scriptPath);
     h.assert.strictEqual(r2.status, 0);

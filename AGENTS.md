@@ -251,6 +251,7 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
 - **GTK 应用默认不走门户**：`GtkFileChooserNative` 只在 `GTK_USE_PORTAL=1`（或沙箱）时才调 `FileChooser`，LocalSend（file_selector_linux）、大量 Flutter/GTK 程序因此看不到 Hoshineko。一键安装写 `~/.config/environment.d/60-hoshineko-portal.conf`（卸载时只删自己新建的），并对真实家目录执行 `systemctl --user set-environment` + `dbus-update-activation-environment`（e2e 沙箱 HOME 下跳过，避免污染开发者会话）。新登录后生效。
 - **重启前必须 `reset-failed`**：反复安装/重启 xdg-desktop-portal 会命中 systemd `start-limit-hit`，单元进入 failed，`org.freedesktop.portal.FileChooser` 整个从宿主 portal 消失，所有应用回落自带对话框。install/uninstall 的重启前均有 `systemctl --user reset-failed`；排查时先看 `systemctl --user is-active xdg-desktop-portal`。
 - 诊断口诀：`gdbus introspect` 看不到 FileChooser → 宿主 portal 或选路有问题；能看到但应用仍弹 GTK 对话框 → 应用没走门户（`GTK_USE_PORTAL`）。
+- **SIGBUS 坑（v3.0.1009）**：直接用 `install`/`cp` 覆盖 `/usr/local/bin/HoshinekoFM` 会 O_TRUNC 原 inode——正在运行的 AppImage 进程或安装瞬间被 D-Bus 激活的新进程 mmap 到截断文件立刻 SIGBUS，portal 日志为 `Activated service ... received signal 7`，随后 FileChooser 接口整体消失（“门户完全不工作”）。install.sh 现在所有安装都用同目录临时文件 + rename 的 `atomic_install`，二进制相同则跳过重写；portal 重启后还会主动检查 FileChooser 接口并给出修复命令。
 脚本里读桌面列表必须 `printf '%s\n'`——无换行时 `read` 在 EOF 返回非零，`while` 循环体不会执行（本轮真实 bug）。
 
 ## FileManager1 归属（Dux Files 等同类应用，v3.0.1007 起，未发布）

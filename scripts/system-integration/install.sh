@@ -308,21 +308,52 @@ kill_stale_services() {
   fi
 }
 
+# 原子替换安装：写同目录临时文件再 rename。
+# 直接 `install` 到既有路径会 O_TRUNC 原 inode——正在运行的 AppImage
+# 进程（以及安装过程中被 D-Bus 激活的新进程）mmap 到被截断的文件会
+# 立刻 SIGBUS，xdg-desktop-portal 报
+# "Activated service ... received signal 7"，FileChooser 接口整个消失。
+# 原子替换让旧进程继续使用旧 inode，新进程读到完整文件。
+# 源与目标完全一致时直接跳过（避免无谓重写，也减少上述竞态窗口）。
+atomic_install() {
+  local src="$1" dst="$2" mode="$3" tmp
+  if [ -f "$dst" ] && cmp -s "$src" "$dst"; then
+    return 0
+  fi
+  mkdir -p "$(dirname "$dst")"
+  tmp="$(dirname "$dst")/.$(basename "$dst").hoshineko.$$"
+  cp "$src" "$tmp"
+  chmod "$mode" "$tmp"
+  mv -f "$tmp" "$dst"
+}
+
 root_install() {
   install -d -m 755 "$PORTALS_DIR" "$SERVICES_DIR" "$(dirname "$SYSTEM_BIN")"
-  install -m 644 "$PKG_DIR/portals/hoshineko.portal" "$PORTALS_DIR/hoshineko.portal"
+  atomic_install "$PKG_DIR/portals/hoshineko.portal" "$PORTALS_DIR/hoshineko.portal" 644
   # D-Bus 激活文件：Exec 统一指向固定安装路径（模板默认为 /usr/bin/HoshinekoFM）
-  install -m 644 "$PKG_DIR/dbus/org.freedesktop.FileManager1.service" "$SERVICES_DIR/"
-  sed -i "s|^Exec=/usr/bin/HoshinekoFM|Exec=$SYSTEM_BIN|" \
-    "$SERVICES_DIR/org.freedesktop.FileManager1.service"
-  install -m 644 "$PKG_DIR/dbus/org.freedesktop.impl.portal.desktop.hoshineko.service" "$SERVICES_DIR/"
-  sed -i "s|^Exec=/usr/bin/HoshinekoFM|Exec=$SYSTEM_BIN|" \
-    "$SERVICES_DIR/org.freedesktop.impl.portal.desktop.hoshineko.service"
+  # 先写临时文件、sed 替换 Exec，再原子 rename
+  local fm1_svc="$SERVICES_DIR/org.freedesktop.FileManager1.service"
+  local portal_svc="$SERVICES_DIR/org.freedesktop.impl.portal.desktop.hoshineko.service"
+  local tmp
+  tmp="$(dirname "$fm1_svc")/.$(basename "$fm1_svc").hoshineko.$$"
+  cp "$PKG_DIR/dbus/org.freedesktop.FileManager1.service" "$tmp"
+  sed -i "s|^Exec=/usr/bin/HoshinekoFM|Exec=$SYSTEM_BIN|" "$tmp"
+  chmod 644 "$tmp"
+  mv -f "$tmp" "$fm1_svc"
+  tmp="$(dirname "$portal_svc")/.$(basename "$portal_svc").hoshineko.$$"
+  cp "$PKG_DIR/dbus/org.freedesktop.impl.portal.desktop.hoshineko.service" "$tmp"
+  sed -i "s|^Exec=/usr/bin/HoshinekoFM|Exec=$SYSTEM_BIN|" "$tmp"
+  chmod 644 "$tmp"
+  mv -f "$tmp" "$portal_svc"
 
   # 本应用二进制 → /usr/local/bin/HoshinekoFM（D-Bus 激活的执行体）
   if [ -n "${HOSHINEKO_APPIMAGE_STAGE:-}" ] && [ -f "$HOSHINEKO_APPIMAGE_STAGE" ]; then
-    install -m 755 "$HOSHINEKO_APPIMAGE_STAGE" "$SYSTEM_BIN"
-    echo "[root] 应用已安装到 $SYSTEM_BIN"
+    if [ -f "$SYSTEM_BIN" ] && cmp -s "$HOSHINEKO_APPIMAGE_STAGE" "$SYSTEM_BIN"; then
+      echo "[root] $SYSTEM_BIN 已是最新，跳过重写（避免截断运行中进程）"
+    else
+      atomic_install "$HOSHINEKO_APPIMAGE_STAGE" "$SYSTEM_BIN" 755
+      echo "[root] 应用已安装到 $SYSTEM_BIN"
+    fi
   elif [ -x "$SYSTEM_BIN" ] || [ -x /usr/bin/HoshinekoFM ]; then
     echo "[root] 检测到已安装的 HoshinekoFM，跳过二进制安装"
   else
@@ -411,7 +442,9 @@ user_install() {
     if [ -f "$USER_BIN" ] && cmp -s "$copy_src" "$USER_BIN"; then
       echo "[user] 用户级副本已是最新（$USER_BIN）"
     else
-      install -D -m 755 "$copy_src" "$USER_BIN"
+      # 原子替换：直接覆盖会截断正在作为 --portal/--filemanager1 常驻的
+      # 旧 inode，触发 SIGBUS（portal 侧“received signal 7”）
+      atomic_install "$copy_src" "$USER_BIN" 755
       echo "[user] 应用已复制到 $USER_BIN"
     fi
   fi
@@ -461,6 +494,19 @@ user_install() {
     timeout 20 systemctl --user reset-failed xdg-desktop-portal.service 2>/dev/null || true
     timeout 20 systemctl --user --no-block restart xdg-desktop-portal.service 2>/dev/null || true
     echo "[user] xdg-desktop-portal 服务已重启"
+    # 验证宿主 portal 是否成功建立 FileChooser 代理：后端激活崩溃时
+    # portal 只会在启动日志里报错，接口整体消失（应用端表现为“完全不
+    # 工作”）。这里主动检查并提示。
+    if command -v gdbus >/dev/null 2>&1; then
+      sleep 1
+      if ! gdbus introspect --session --dest org.freedesktop.portal.Desktop \
+          --object-path /org/freedesktop/portal/desktop 2>/dev/null \
+          | grep -q 'interface org.freedesktop.portal.FileChooser'; then
+        echo "[warn] xdg-desktop-portal 未提供 FileChooser 接口（后端激活失败）——" \
+          "请确认 $SYSTEM_BIN 可执行，然后执行：" \
+          "systemctl --user reset-failed xdg-desktop-portal.service && systemctl --user restart xdg-desktop-portal.service" >&2
+      fi
+    fi
   fi
 
   # 清理旧的服务模式常驻进程：不杀则升级后的新版（新 Exec/新二进制）
