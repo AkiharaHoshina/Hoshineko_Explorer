@@ -132,6 +132,24 @@ export const TabBar: React.FC<TabBarProps> = ({
   const kbIdxRef = useRef(kbIdx);
   const barRef = useRef<HTMLDivElement | null>(null);
 
+  /** 上一次渲染的标签数量：区分「新建」与「关闭」，只在新建时滚到末尾 */
+  const prevTabCountRef = useRef(tabs.length);
+
+  /**
+   * 新建标签页时把标签栏视图滚到末尾。标签溢出后，新标签默认落在
+   * 可视区外；滚到最右后最后一个标签紧邻新建按钮，既可见又是
+   * 距离新建按钮最近的位置。关闭标签（数量减少）不移动视口。
+   */
+  useEffect(() => {
+    const created = tabs.length > prevTabCountRef.current;
+    prevTabCountRef.current = tabs.length;
+    if (!created) return;
+    const bar = barRef.current;
+    if (!bar) return;
+    // scrollLeft 会自动钳制到最大值；未溢出时保持 0
+    bar.scrollLeft = bar.scrollWidth;
+  }, [tabs.length]);
+
   /**
    * 标签栏横向滚动：横向滚动条已隐藏，改用滚轮水平移动标签栏
    * （等价触控左右拖动）。纵向滚轮映射为横向，触控板横向滚动直接

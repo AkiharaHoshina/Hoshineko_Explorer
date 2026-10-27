@@ -1,8 +1,9 @@
 /**
- * e2e 110：标签栏滚轮横向滚动。
+ * e2e 110：标签栏滚轮横向滚动 + 新建标签自动滚到末尾。
  *
  * 横向滚动条已隐藏（Chrome 风格选中页底部需要无缝衔接），溢出标签
  * 改由滚轮查看：纵向滚轮映射为横向滚动、触控板 deltaX 直接生效。
+ * 新建标签时视图自动滚到末尾，保证新标签可见且紧邻新建按钮。
  * 用例通过合成 WheelEvent 验证（真实滚轮在软件渲染下不可注入）。
  */
 const h = require('./harness.cjs');
@@ -28,7 +29,14 @@ const h = require('./harness.cjs');
       return { max: b.scrollWidth - b.clientWidth, left: b.scrollLeft };
     })()`);
     h.assert.ok(overflow.value.max > 0, `标签栏应溢出，实际 max=${overflow.value.max}`);
-    h.assert.strictEqual(overflow.value.left, 0, '初始应停在最左');
+    // 新建标签后应自动滚到末尾（最后一个标签紧邻新建按钮）
+    h.assert.ok(
+      Math.abs(overflow.value.left - overflow.value.max) < 1,
+      `新建标签后应滚到末尾，实际 ${overflow.value.left} / ${overflow.value.max}`,
+    );
+
+    // 重置到最左，验证滚轮行为
+    await h.js(win, `document.querySelector('.tab-bar').scrollLeft = 0`);
 
     // 纵向滚轮向下 → 横向右移
     const down = await h.js(win, `(() => {
@@ -66,6 +74,20 @@ const h = require('./harness.cjs');
     })()`);
     // scrollLeft 可能因缩放返回小数，容差 1px
     h.assert.ok(Math.abs(clamp.value.left - clamp.value.max) < 1, `滚动应钳制在最大位置，实际 ${clamp.value.left} / ${clamp.value.max}`);
+
+    // 从非末尾位置新建标签 → 视图再次回到末尾
+    await h.js(win, `document.querySelector('.tab-bar').scrollLeft = 0`);
+    await h.hotkey(win, 'T', ['control']);
+    await h.waitFor(win, `document.querySelectorAll('.tab-item').length === 17`, { timeout: 4000 });
+    await h.sleep(150);
+    const created = await h.js(win, `(() => {
+      const b = document.querySelector('.tab-bar');
+      return { left: b.scrollLeft, max: b.scrollWidth - b.clientWidth };
+    })()`);
+    h.assert.ok(
+      Math.abs(created.value.left - created.value.max) < 1,
+      `新建标签后视图应回到末尾，实际 ${created.value.left} / ${created.value.max}`,
+    );
   });
 
   h.finish();

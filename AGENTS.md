@@ -232,6 +232,9 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
   `deltaMode` 行/页换算为像素；Ctrl+滚轮放行给缩放。改这里时跑
   `scripts/e2e/110-tab-wheel-scroll.test.cjs`（合成 WheelEvent；注意
   `scrollLeft` 受缩放影响可能是小数，边界断言用 1px 容差）。
+- **新建标签自动滚到末尾**：`tabs.length` 增加时 `scrollLeft =
+  scrollWidth`（关闭标签不移动视口）。用 `prevTabCountRef` 区分
+  新建/关闭——直接监听 activeTabId 会在点击旧标签时把视图拉走。
 - **首个标签指 DOM 第一个**，不是滚动后的第一个可见标签；不要引入 JS
   可见性判断。
 - e2e 注意：标签相关用例多为真实坐标点击，本机 1280×800（缩放 2）下
