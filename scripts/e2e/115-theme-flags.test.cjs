@@ -34,17 +34,19 @@ const h = require('./harness.cjs');
       const marked = [...document.querySelectorAll('[data-pride-flag]')];
       const active = document.querySelector('.sidebar-item.active');
       const cs = active ? getComputedStyle(active) : null;
-      const before = active ? getComputedStyle(active, '::before') : null;
+      const bar = active ? getComputedStyle(active, '::after') : null;
       return {
         count: marked.length,
         flag: active?.dataset.prideFlag ?? null,
         icon: active?.querySelector('md-icon')?.textContent ?? null,
         fg: cs ? cs.color : null,
-        gradient: before ? before.backgroundImage : null,
+        bg: cs ? cs.backgroundColor : null,
+        bar: bar ? bar.backgroundImage : null,
+        barDisplay: bar ? bar.display : null,
         surface: getComputedStyle(document.documentElement).getPropertyValue('--md-sys-color-surface').trim(),
       };
     })()`)).value;
-    const stopCount = (g) => ((g ?? '').match(/color\(/g) ?? []).length;
+    const stopCount = (g) => ((g ?? '').match(/(color|rgba?)\(/g) ?? []).length;
 
     // ── 1) 设置页：旗帜不再是预设；骄傲主题行存在且选项齐全 ──
     await setPride('transgender');
@@ -72,15 +74,18 @@ const h = require('./harness.cjs');
     h.assert.strictEqual(s1.icon, 'image', '应切到图片位置');
     h.assert.strictEqual(s1.count, 1, '只应有当前条目带骄傲底纹');
     h.assert.strictEqual(s1.flag, 'transgender', '条目应标记当前旗帜 id');
-    h.assert.ok(/linear-gradient/.test(s1.gradient ?? ''), '条目应有整面旗条纹背景');
-    // 硬边条纹 = 每条带两个色标 → 5 条共 10 个色标
-    h.assert.ok(stopCount(s1.gradient) >= 10, `应渲染 5 条硬边色带（色标 ${stopCount(s1.gradient)}）`);
+    // 方案 A+C：左侧 5px 旗条（全饱和条纹）+ 容器色
+    h.assert.ok(/linear-gradient/.test(s1.bar ?? ''), '条目应有左侧旗条渐变');
+    h.assert.ok(stopCount(s1.bar) >= 10, `旗条应渲染 5 条硬边色带（色标 ${stopCount(s1.bar)}）`);
+    h.assert.ok(/^(rgb|color)\(/.test(s1.bg ?? ''), `容器色应为混色结果（实际 ${s1.bg}）`);
+    h.assert.strictEqual(s1.barDisplay, 'block', '展开态旗条应可见');
 
     // ── 3) 渲染确定：重复点同一位置，底纹不变（无随机） ──
     await h.clickPlace(win, 'image');
     await h.sleep(400);
     const s1b = await prideState();
-    h.assert.strictEqual(s1b.gradient, s1.gradient, '同一旗帜下重复点击底纹应完全一致（无随机）');
+    h.assert.strictEqual(s1b.bar, s1.bar, '同一旗帜下重复点击旗条应完全一致（无随机）');
+    h.assert.strictEqual(s1b.bg, s1.bg, '同一旗帜下重复点击容器色应一致');
 
     // ── 4) 切到另一位置 → 旧条目复原，新条目同样铺满整面旗 ──
     await h.clickPlace(win, 'description');
@@ -88,19 +93,21 @@ const h = require('./harness.cjs');
     const s2 = await prideState();
     h.assert.strictEqual(s2.icon, 'description', '应切到文档位置');
     h.assert.strictEqual(s2.count, 1, '切走后旧条目不应保留底纹');
-    h.assert.strictEqual(s2.gradient, s1.gradient, '同一旗帜下不同条目底纹一致');
+    h.assert.strictEqual(s2.bar, s1.bar, '同一旗帜下不同条目旗条一致');
+    h.assert.strictEqual(s2.bg, s1.bg, '同一旗帜下不同条目容器色一致');
 
     // ── 5) 切换明暗主题 → 底纹与文字色必须立刻刷新 ──
     await h.js(win, `window.electron.setThemeSource('light'); true`);
     await h.sleep(900);
     const sLight = await prideState();
     h.assert.ok(sLight.surface !== s2.surface, '切换亮色后主题 surface 应变化');
-    h.assert.ok(sLight.gradient !== s2.gradient, '切换亮色后骄傲底纹应重算（不能沿用暗色值）');
+    h.assert.ok(sLight.bg !== s2.bg, '切换亮色后容器色应重算（不能沿用暗色值）');
     h.assert.ok(sLight.fg !== s2.fg, '文字色应随主题更新');
+    h.assert.strictEqual(sLight.bar, s2.bar, '旗条是旗色本色，不应随主题变化');
     await h.js(win, `window.electron.setThemeSource('dark'); true`);
     await h.sleep(900);
     const sBack = await prideState();
-    h.assert.ok(sBack.gradient !== sLight.gradient, '切回暗色后骄傲底纹应再次重算');
+    h.assert.ok(sBack.bg !== sLight.bg, '切回暗色后容器色应再次重算');
 
     // ── 6) 收起态（图标轨道）同样生效 ──
     await h.clickEl(win, '.sidebar-collapse-btn');
@@ -115,6 +122,9 @@ const h = require('./harness.cjs');
     h.assert.strictEqual(s3.icon, 'image', '收起态也应能切换位置');
     h.assert.strictEqual(s3.count, 1, '收起态同样只应有当前条目带底纹');
     h.assert.strictEqual(s3.flag, 'transgender', '收起态同样应用当前旗帜');
+    // 收起态不显示旗条，但容器色保留
+    h.assert.strictEqual(s3.barDisplay, 'none', '收起态不应显示彩条');
+    h.assert.ok(/^(rgb|color)\(/.test(s3.bg ?? ''), '收起态仍应有容器色');
 
     // ── 7) 设为「无」→ 不再着色 ──
     await setPride(null);

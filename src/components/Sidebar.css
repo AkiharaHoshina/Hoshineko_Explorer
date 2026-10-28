@@ -481,24 +481,35 @@
 .sidebar-pin-section {
     margin-top: 4px;
 }
-/* ── 骄傲主题（v3.0.1018）：当前激活条目显示整面旗条纹 ──
- * ::before 铺满条目（继承圆角），条纹比例由 --pride-gradient（inline）给出；
- * 渐变另一端是 var(--md-sys-color-surface-container)，所以明暗主题切换时
- * 会自动重算——不再有"切主题后颜色不刷新"的问题。文字/图标抬到上层。 */
+/* ── 骄傲主题（v3.0.1020 方案 A+C）：容器色 + 左侧旗条 ──
+ * 容器色 = 旗首色混 M3 选中态容器色（--pride-container，inline）；
+ * 旗条 = 左侧悬浮的 4px 圆角竖条，全饱和硬边条纹（--pride-bar，inline）
+ * —— 不用贴边方案：28px 胶囊圆角会把贴边色条裁成一个几乎看不见的月牙。
+ * 两者都由 CSS 变量求值 → 明暗主题切换即时刷新。收起态不显示旗条。 */
 .sidebar-item[data-pride-flag] {
     position: relative;
+    background-color: var(--pride-container);
 }
 
-.sidebar-item[data-pride-flag]::before {
+.sidebar-item[data-pride-flag]::after {
     content: '';
     position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: var(--pride-gradient);
+    left: 6px;
+    top: 8px;
+    bottom: 8px;
+    width: 4px;
+    border-radius: 2px;
+    background: var(--pride-bar);
     pointer-events: none;
+    z-index: 0;
 }
 
 .sidebar-item[data-pride-flag] > * {
     position: relative;
     z-index: 1;
+}
+
+/* 收起态（图标轨道）：不显示旗条，保留容器色 */
+.sidebar--collapsed .sidebar-item[data-pride-flag]::after {
+    display: none;
 }

@@ -77,14 +77,19 @@ const { ipcMain } = require('electron');
       '显示页面包屑应只有 设置/主题和显示 两段',
     );
 
+    // 返回上级：分类页 → 根
+    await h.clickEl(win, '[data-kb-zone="topbar-up"] md-icon-button');
+    await h.waitFor(win, `!!document.querySelector('.settings-category-grid')`, { timeout: 8000 });
+
     // 旧子页链接仍可用：settings://display/theme 归一为 settings://display
+    // （从根出发，路径变化才会退出地址栏编辑态）
     await h.clickEl(win, '.omnibar-trigger');
     await h.waitFor(win, `!!document.querySelector('.omnibar.mode-edit .omnibar-input')`);
     await h.setReactInput(win, '.omnibar.mode-edit .omnibar-input', 'settings://display/theme');
     await h.key(win, 'Enter');
     await h.waitFor(win, `!!document.querySelector('.theme-color-preset-grid')`, { timeout: 8000 });
 
-    // 返回上级：分类页 → 根
+    // 回根，继续后面的「非法子路径归一」用例
     await h.clickEl(win, '[data-kb-zone="topbar-up"] md-icon-button');
     await h.waitFor(win, `!!document.querySelector('.settings-category-grid')`, { timeout: 8000 });
 

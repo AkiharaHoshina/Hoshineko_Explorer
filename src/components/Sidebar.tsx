@@ -236,21 +236,23 @@ function findDeviceByPath(list: AllDevice[], devicePath: string): AllDevice | nu
 }
 
 /**
- * 旗帜条纹 → "整面旗"背景（v3.0.1019）。
+ * 骄傲主题的背景（v3.0.1020，方案 A+C）：**容器色 + 左侧旗条**。
  *
- * 每条带按同一比例（16%）`color-mix` 混进 `surface-container`：多色同时
- * 出现、一眼认出旗帜；混色的另一端是 CSS 变量，**明暗主题切换即时重算**。
- * 相邻色标取相同百分比 = **硬边条纹**（不再有插值出来的模糊过渡）。
- * 随机强调条已按用户定案删除——渲染完全确定。
+ * - 容器色：旗首色按 24% 混进 `secondary-container`（M3 选中态容器色），
+ *   "这条被这面旗染色"，文字仍用 `on-secondary-container`，对比度安全；
+ * - 旗条：左侧 5px 竖向**全饱和**硬边条纹，识别旗帜本身；
+ * - 两者都由 CSS 变量求值 → 明暗主题切换即时重算，不写死 rgb。
  */
-function buildPrideGradient(stripes: string[]): string {
+function buildPrideBar(stripes: string[]): string {
   const seg = 100 / stripes.length;
   const stops: string[] = [];
-  stripes.forEach((c, i) => {
-    const mix = `color-mix(in srgb, ${c} 16%, var(--md-sys-color-surface-container))`;
-    stops.push(`${mix} ${i * seg}%`, `${mix} ${(i + 1) * seg}%`);
-  });
-  return `linear-gradient(160deg, ${stops.join(', ')})`;
+  stripes.forEach((c, i) => stops.push(`${c} ${i * seg}%`, `${c} ${(i + 1) * seg}%`));
+  return `linear-gradient(to bottom, ${stops.join(', ')})`;
+}
+
+/** 容器色：旗首色 24% 混进 M3 选中态容器色 */
+function buildPrideContainer(primary: string): string {
+  return `color-mix(in srgb, ${primary} 24%, var(--md-sys-color-secondary-container))`;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -305,8 +307,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     /** 掷色时使用的旗帜 id（设置变更后旧色自动失效，无需 effect 清理） */
     accent: string | null;
     key: string;
-    /** 整面旗渐变（CSS，随主题即时重算） */
-    gradient: string;
+    /** 左侧旗条（全饱和硬边条纹） */
+    bar: string;
+    /** 容器色（旗首色混 secondary-container，随主题即时重算） */
+    container: string;
   } | null>(null);
 
   /** 激活条目时套用当前旗帜的条纹背景（无随机，渲染确定） */
@@ -316,7 +320,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setPridePick(null);
       return;
     }
-    setPridePick({ accent: flag.id, key, gradient: buildPrideGradient(flag.stripes) });
+    setPridePick({
+      accent: flag.id,
+      key,
+      bar: buildPrideBar(flag.stripes),
+      container: buildPrideContainer(flag.accent),
+    });
   }, [prideAccent]);
 
   /** 导航并掷色（所有"位置类"条目共用） */
@@ -333,9 +342,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ): { style?: React.CSSProperties; "data-pride-flag"?: string } => {
     if (!pridePick || pridePick.accent !== prideAccent || !active || dragOver || pridePick.key !== key) return {};
     return {
-      // 自定义属性驱动 ::before 的整面旗渐变（见 Sidebar.css）——不写死 rgb，
-      // 主题（明暗/种子色）变化时由 CSS 重新求值
-      style: { "--pride-gradient": pridePick.gradient } as React.CSSProperties,
+      // 两个自定义属性分别驱动容器色与左侧旗条（见 Sidebar.css）——不写死
+      // rgb，主题（明暗/种子色）变化时由 CSS 重新求值
+      style: {
+        "--pride-container": pridePick.container,
+        "--pride-bar": pridePick.bar,
+      } as React.CSSProperties,
       "data-pride-flag": pridePick.accent ?? undefined,
     };
   };
