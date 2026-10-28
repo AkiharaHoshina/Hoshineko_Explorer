@@ -1,5 +1,31 @@
 # 更新日志
 
+## v3.0.1033 — 修复 Niri + DMS2 壁纸识别不到
+
+- 版本号升至 `3.0.1033`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1033.AppImage` / `HoshinekoFM-3.0.1033-size.AppImage`。
+- **根因**：DMS2 把壁纸从 `~/.config/DankMaterialShell/settings.json`
+  （`greeterWallpaperPath`，DMS2 已删除该键）挪到了**状态目录**
+  `$XDG_STATE_HOME/dms/session.json` 的 `wallpaperPath` / `monitorWallpapers`；
+  DMS 又自己用 Quickshell 画壁纸，niri 配置里没有壁纸守护进程的
+  `spawn-at-startup` 行。旧探测链（settings.json → niri → gsettings → 常见目录）
+  在 Niri + DMS 下全部落空，`findWallpaper()` 返回 `null`。
+- **修复**：探测链改为 **DMS 会话状态 → niri spawn → gsettings → 常见目录 →
+  DMS 锁屏兜底**；新增 `wallpaperFromDmsSession()`，按 DMS 的
+  `getMonitorWallpaper` 语义解析：`perModeWallpaper` 取当前明暗的
+  `wallpaperPathLight/Dark`、`perMonitorWallpaper` 取 `monitorWallpapers[输出名]`
+  （回退 `wallpaperPath`），纯色（`#RRGGBB`）/空值/失效路径自动跳过。
+- **路径改为按调用读取 XDG 目录**（`XDG_CONFIG_HOME`/`XDG_STATE_HOME`/`XDG_CACHE_HOME`），
+  DMS 新目录名 `dms` 优先、旧名 `DankMaterialShell` 兜底；`readDmsTheme`
+  的 settings/colors 读取同步走候选链。
+- **`isImageFile` 支持无扩展名图片**：扩展名不在白名单时嗅探文件头魔数
+  （PNG/JPEG/GIF/WEBP/BMP/AVIF）——GNOME 的 `~/.config/background` 这类无后缀壁纸
+  不再被误拒。
+- e2e 116（新增）：伪造临时 XDG 状态目录覆盖共享壁纸、纯色跳过、明暗分套、
+  无扩展名魔数识别、每屏壁纸失效路径回退、不存在路径不返回。
+  实机验证：`findWallpaper()` 返回 DMS 当前壁纸，
+  `genWallpaperTheme` 由 matugen 生成主题（seed `#383e58`）。
+
 ## v3.0.1032 — 浅色模式侧边栏选中按钮底色加深一级（通用）
 
 - 版本号升至 `3.0.1032`；AppImage 产物名变为

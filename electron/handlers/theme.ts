@@ -1,4 +1,4 @@
-import { ipcMain, nativeImage, nativeTheme, type BrowserWindow } from 'electron';
+import { ipcMain, nativeImage, nativeTheme, screen, type BrowserWindow } from 'electron';
 import path from 'path';
 import os from 'os';
 import { promises as fs } from 'fs';
@@ -10,10 +10,50 @@ const execFileAsync = promisify(execFile);
 
 const HOME = os.homedir();
 
-/** DMS（DankMaterialShell）配置文件路径 */
-const DMS_SETTINGS_PATH = path.join(HOME, '.config/DankMaterialShell/settings.json');
-/** DMS 生成的 M3 颜色方案缓存（dark/light 全套角色 + 种子色） */
-const DMS_COLORS_PATH = path.join(HOME, '.cache/DankMaterialShell/dms-colors.json');
+/** XDG 目录（按调用读取环境变量，便于测试覆盖；缺省回退 HOME 下的标准位置） */
+function xdgConfigHome(): string {
+  return process.env.XDG_CONFIG_HOME || path.join(HOME, '.config');
+}
+function xdgStateHome(): string {
+  return process.env.XDG_STATE_HOME || path.join(HOME, '.local/state');
+}
+function xdgCacheHome(): string {
+  return process.env.XDG_CACHE_HOME || path.join(HOME, '.cache');
+}
+
+/**
+ * DMS（DankMaterialShell）候选路径。
+ * DMS2 把目录从 `DankMaterialShell` 改名为 `dms`（旧名保留为软链）；
+ * 这里按新名优先、旧名兜底，避免只看其中一边。
+ */
+function dmsConfigCandidates(...segments: string[]): string[] {
+  return [
+    path.join(xdgConfigHome(), 'dms', ...segments),
+    path.join(xdgConfigHome(), 'DankMaterialShell', ...segments),
+  ];
+}
+function dmsStateCandidates(...segments: string[]): string[] {
+  return [
+    path.join(xdgStateHome(), 'dms', ...segments),
+    path.join(xdgStateHome(), 'DankMaterialShell', ...segments),
+  ];
+}
+function dmsCacheCandidates(...segments: string[]): string[] {
+  return [
+    path.join(xdgCacheHome(), 'dms', ...segments),
+    path.join(xdgCacheHome(), 'DankMaterialShell', ...segments),
+  ];
+}
+
+/** 依次读取第一个存在/可读的文件，全部失败返回 null */
+async function readFirstExisting(candidates: string[]): Promise<string | null> {
+  for (const p of candidates) {
+    try {
+      return await fs.readFile(p, 'utf-8');
+    } catch { /* 尝试下一个候选 */ }
+  }
+  return null;
+}
 
 /** M3 颜色角色（matugen 模板占位符 snake_case） */
 const ROLES = [
@@ -75,7 +115,11 @@ export interface ColorSchemeResult {
 async function detectColorScheme(): Promise<ColorSchemeResult> {
   // 1) DMS（经门户）
   try {
-    await fs.access(DMS_SETTINGS_PATH);
+    let hasDms = false;
+    for (const p of dmsConfigCandidates('settings.json')) {
+      try { await fs.access(p); hasDms = true; break; } catch { /* 继续 */ }
+    }
+    if (!hasDms) throw new Error('DMS 配置不存在');
     try {
       const { stdout } = await execFileAsync(
         'gsettings', ['get', 'org.gnome.desktop.interface', 'color-scheme'], { timeout: 3000 },
@@ -132,10 +176,9 @@ export interface WallpaperThemeResult {
  */
 async function readDmsTheme(): Promise<DmsThemeResult> {
   try {
-    const [settingsRaw, colorsRaw] = await Promise.all([
-      fs.readFile(DMS_SETTINGS_PATH, 'utf-8'),
-      fs.readFile(DMS_COLORS_PATH, 'utf-8'),
-    ]);
+    const settingsRaw = await readFirstExisting(dmsConfigCandidates('settings.json'));
+    const colorsRaw = await readFirstExisting(dmsCacheCandidates('dms-colors.json'));
+    if (!settingsRaw || !colorsRaw) return { available: false };
     const settings = JSON.parse(settingsRaw) as {
       matugenScheme?: string;
       matugenContrast?: number;
@@ -166,13 +209,48 @@ async function readDmsTheme(): Promise<DmsThemeResult> {
   }
 }
 
-/** 检查路径是否为存在的图片文件 */
+/** 常见图片格式的文件头魔数嗅探（用于无扩展名的壁纸文件，如 ~/.config/background） */
+function sniffImageMagic(buf: Buffer): boolean {
+  if (buf.length < 12) return false;
+  // PNG
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return true;
+  // JPEG
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true;
+  // GIF
+  if (buf.subarray(0, 4).toString('ascii') === 'GIF8') return true;
+  // WEBP（RIFF....WEBP）
+  if (buf.subarray(0, 4).toString('ascii') === 'RIFF' && buf.subarray(8, 12).toString('ascii') === 'WEBP') return true;
+  // BMP
+  if (buf[0] === 0x42 && buf[1] === 0x4d) return true;
+  // AVIF/HEIF（ISO BMFF：....ftyp）
+  if (buf.subarray(4, 8).toString('ascii') === 'ftyp') return true;
+  return false;
+}
+
+/**
+ * 检查路径是否为存在的图片文件。
+ * 优先按扩展名判断；扩展名缺失/非常见时嗅探文件头，避免拒绝
+ * `~/.config/background` 这类无扩展名壁纸。
+ */
 async function isImageFile(p: string): Promise<boolean> {
   if (!p || !path.isAbsolute(p)) return false;
-  if (!IMAGE_EXTS.has(path.extname(p).toLowerCase())) return false;
+  let st;
   try {
-    const st = await fs.stat(p);
-    return st.isFile();
+    st = await fs.stat(p);
+  } catch {
+    return false;
+  }
+  if (!st.isFile()) return false;
+  if (IMAGE_EXTS.has(path.extname(p).toLowerCase())) return true;
+  try {
+    const fh = await fs.open(p, 'r');
+    try {
+      const buf = Buffer.alloc(16);
+      await fh.read(buf, 0, 16, 0);
+      return sniffImageMagic(buf);
+    } finally {
+      await fh.close();
+    }
   } catch {
     return false;
   }
@@ -246,32 +324,122 @@ async function wallpaperFromCommonDirs(): Promise<string | null> {
   return null;
 }
 
-/** DMS 配置里的显式壁纸路径（greeter / 锁屏） */
-async function wallpaperFromDmsSettings(): Promise<string | null> {
-  try {
-    const raw = await fs.readFile(DMS_SETTINGS_PATH, 'utf-8');
-    const settings = JSON.parse(raw) as Record<string, unknown>;
-    for (const key of ['greeterWallpaperPath', 'lockScreenWallpaperPath']) {
-      const v = settings[key];
-      if (typeof v === 'string' && v.trim()) {
-        const p = v.replace(/^~(?=$|\/)/, HOME);
-        if (await isImageFile(p)) return p;
-      }
+/** DMS2 会话状态里与壁纸相关的字段（~/.local/state/dms/session.json） */
+interface DmsSessionState {
+  wallpaperPath?: unknown;
+  perMonitorWallpaper?: unknown;
+  monitorWallpapers?: unknown;
+  perModeWallpaper?: unknown;
+  wallpaperPathLight?: unknown;
+  wallpaperPathDark?: unknown;
+  monitorWallpapersLight?: unknown;
+  monitorWallpapersDark?: unknown;
+}
+
+/** 把 session.json 里的壁纸值规整为绝对路径；纯色（#RRGGBB）/空值返回 null */
+function normalizeWallpaperValue(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  let p = v.trim();
+  if (!p || p.startsWith('#')) return null;
+  if (p.startsWith('file://')) {
+    try {
+      p = decodeURIComponent(p.slice(7));
+    } catch {
+      return null;
     }
-  } catch { /* DMS 未安装或解析失败 */ }
+  }
+  p = p.replace(/^~(?=$|\/)/, HOME);
+  return path.isAbsolute(p) ? p : null;
+}
+
+/** 取对象里的 string 值表（monitorWallpapers 之类） */
+function asStringMap(v: unknown): Record<string, string> {
+  if (!v || typeof v !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof val === 'string') out[k] = val;
+  }
+  return out;
+}
+
+/** 当前主显示器的输出名（Wayland 下 Electron 可能给空 label，此时返回 null） */
+function primaryOutputName(): string | null {
+  try {
+    const label = screen.getPrimaryDisplay().label;
+    return label && label.trim() ? label.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * DMS2 壁纸：存在**状态目录**的 session.json（不是 settings.json）。
+ * 解析规则与 DMS 的 `SessionData.getMonitorWallpaper` 对齐：
+ * - `perModeWallpaper` → 当前明暗对应的 `wallpaperPathLight/Dark`（空则回退 `wallpaperPath`）；
+ * - `perMonitorWallpaper` → `monitorWallpapers[输出名]`（缺失回退 `wallpaperPath`）。
+ * 值是纯色或已失效路径时继续尝试下一个候选，全部无效返回 null。
+ */
+async function wallpaperFromDmsSession(): Promise<string | null> {
+  const raw = await readFirstExisting([
+    ...dmsStateCandidates('session.json'),
+    // DMS1 兼容：早期版本把 session.json 放在配置目录
+    ...dmsConfigCandidates('session.json'),
+  ]);
+  if (!raw) return null;
+
+  let session: DmsSessionState;
+  try {
+    session = JSON.parse(raw) as DmsSessionState;
+  } catch {
+    return null;
+  }
+
+  const candidates: (string | null)[] = [];
+  if (session.perModeWallpaper === true) {
+    const mode = (await detectColorScheme()).mode;
+    candidates.push(
+      normalizeWallpaperValue(mode === 'light' ? session.wallpaperPathLight : session.wallpaperPathDark),
+    );
+  }
+  if (session.perMonitorWallpaper === true) {
+    const map = asStringMap(session.monitorWallpapers);
+    const output = primaryOutputName();
+    if (output) candidates.push(normalizeWallpaperValue(map[output]));
+    candidates.push(normalizeWallpaperValue(session.wallpaperPath));
+    for (const k of Object.keys(map).sort()) candidates.push(normalizeWallpaperValue(map[k]));
+  } else {
+    candidates.push(normalizeWallpaperValue(session.wallpaperPath));
+  }
+
+  for (const p of candidates) {
+    if (p && (await isImageFile(p))) return p;
+  }
+  return null;
+}
+
+/** 锁屏壁纸（settings.json 的 lockScreenWallpaperPath）——语义不同，仅作最后兜底 */
+async function wallpaperFromDmsLockScreen(): Promise<string | null> {
+  const raw = await readFirstExisting(dmsConfigCandidates('settings.json'));
+  if (!raw) return null;
+  try {
+    const settings = JSON.parse(raw) as Record<string, unknown>;
+    const p = normalizeWallpaperValue(settings.lockScreenWallpaperPath);
+    if (p && (await isImageFile(p))) return p;
+  } catch { /* 解析失败 */ }
   return null;
 }
 
 /**
- * 壁纸路径探测链：DMS 显式路径 → niri config → gsettings → 常见目录。
+ * 壁纸路径探测链：DMS 会话状态 → niri config → gsettings → 常见目录 → DMS 锁屏兜底。
  * 全部失败返回 null（前端引导用户手动选择图片）。
  */
 async function findWallpaper(): Promise<string | null> {
   const chain = [
-    await wallpaperFromDmsSettings(),
+    await wallpaperFromDmsSession(),
     await wallpaperFromNiriConfig(),
     await wallpaperFromGsettings(),
     await wallpaperFromCommonDirs(),
+    await wallpaperFromDmsLockScreen(),
   ];
   return chain.find((p): p is string => p !== null) ?? null;
 }
