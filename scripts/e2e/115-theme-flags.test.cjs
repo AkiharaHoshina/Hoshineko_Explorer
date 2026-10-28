@@ -1,5 +1,5 @@
 /**
- * e2e 115：骄傲主题（v3.0.1023）。
+ * e2e 115：骄傲主题（v3.0.1024）。
  *
  * - 主题内容并入 settings://display（旧 settings://display/theme 归一）；
  * - 预设色盘不含旗帜；
@@ -31,7 +31,7 @@ const h = require('./harness.cjs');
       await h.sleep(400);
     };
 
-    const prideState = async () => (await h.js(win, `(() => {
+    const prideState = async (w = win) => (await h.js(w, `(() => {
       const marked = [...document.querySelectorAll('[data-pride-flag]')];
       const active = document.querySelector('.sidebar-item.active');
       const cs = active ? getComputedStyle(active) : null;
@@ -103,6 +103,16 @@ const h = require('./harness.cjs');
     h.assert.strictEqual(s2.icon, 'description', '应切到文档位置');
     h.assert.strictEqual(s2.count, 1, '切走后旧条目不应保留样式');
     h.assert.ok(s2.color !== s1b.color, `切换后的颜色不得与切换前相同（${s1b.color} → ${s2.color}）`);
+
+    // ── 4b) 冷启动/新窗口：落点是主页时，开机即着色（无需点击侧边栏） ──
+    const winCold = await h.createTestWindow({ argv: ['electron', require('os').homedir()] });
+    await h.waitFor(winCold, `!!document.querySelector('.file-list-item')`, { timeout: 15000 });
+    await h.sleep(900);
+    const sCold = await prideState(winCold);
+    h.assert.strictEqual(sCold.flag, 'transgender', '冷启动激活条目应自动着色（无需点击）');
+    h.assert.strictEqual(sCold.count, 1, '冷启动时只应有激活条目带样式');
+    h.assert.strictEqual(sCold.icon, 'home', '冷启动落点为主页');
+    winCold.destroy();
 
     // ── 5) 换旗即时刷新：只改设置，不点侧边栏 ──
     await h.openSettingsPage(win, /主题和显示|Theme & Display/);

@@ -349,15 +349,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     });
   }, [prideAccent]);
 
-  // 换旗（设置更改）→ 就地给当前着色条目重掷一次，无需再点一次侧边栏。
-  // 这是"同步外部设置"的一次性纠偏，不是派生状态——项目规则禁止 effect 内
-  // 同步 setState，这里显式豁免。
-  useEffect(() => {
-    if (!lastPrideKeyRef.current || !prideAccent) return;
-    rollPride(lastPrideKeyRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在换旗时触发
-  }, [prideAccent]);
-
   /** 导航并掷色（所有"位置类"条目共用） */
   const goWithPride = useCallback((path: string, key: string) => {
     rollPride(key);
@@ -369,9 +360,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
     key: string,
     active: boolean,
     dragOver: boolean,
-  ): { style?: React.CSSProperties; "data-pride-flag"?: string; "data-pride-color"?: string } => {
-    if (!pridePick || pridePick.accent !== prideAccent || !active || dragOver || pridePick.key !== key) return {};
+  ): {
+    style?: React.CSSProperties;
+    "data-pride-flag"?: string;
+    "data-pride-color"?: string;
+    "data-pride-key"?: string;
+  } => {
+    if (!active || dragOver) return {};
+    // 激活条目始终带 key（供「外部导航后补着色」的 effect 定位），
+    // 只有掷过色且 key/旗一致时才挂样式
+    const base = { "data-pride-key": key };
+    if (!pridePick || pridePick.accent !== prideAccent || pridePick.key !== key) return base;
     return {
+      ...base,
       // 两个自定义属性分别驱动容器色与左侧旗条（见 Sidebar.css）——不写死
       // rgb，主题（明暗/种子色）变化时由 CSS 重新求值
       style: {
@@ -387,6 +388,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   /** 侧边栏容器（拖拽边缘翻页的边界参照） */
   const asideRef = useRef<HTMLElement | null>(null);
+
+  /**
+   * 外部导航 / 冷启动 / 新窗口：路径或旗帜变化后，若激活条目还没掷过色
+   * （或旗变了），就地补掷一次——否则只有点侧边栏才会上色。
+   * 激活条目的 key 由 prideAttrs 挂在 `data-pride-key` 上，从 DOM 取，
+   * 免去在 Sidebar 里再复制一份「路径 → key」映射（那份映射在渲染代码里）。
+   * 点条目时 goWithPride 已同步掷色，此处 key/旗一致直接跳过，不会双掷。
+   * 这是「同步外部状态」的一次性纠偏，不是派生状态——项目规则禁止 effect
+   * 内同步 setState，这里显式豁免。
+   */
+  useEffect(() => {
+    const key = asideRef.current
+      ?.querySelector<HTMLElement>('.sidebar-item.active[data-pride-key]')
+      ?.getAttribute('data-pride-key');
+    if (!key) return;
+    if (pridePick?.key === key && pridePick.accent === prideAccent) return;
+    rollPride(key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在路径/旗帜变化时触发
+  }, [currentPath, prideAccent]);
 
   /** 分页内容区（尺寸测量对象；不再是滚动容器） */
   const bodyRef = useRef<HTMLDivElement | null>(null);

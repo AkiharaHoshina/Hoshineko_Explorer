@@ -495,16 +495,15 @@
 .sidebar-item[data-pride-flag]::before {
     content: '';
     position: absolute;
-    /* 斜向旗条：从左上角出发，沿 45° 向右下延伸到胶囊边界（由父级
-       overflow hidden + 圆角裁切），不再是一个小方块 */
-    left: 0;
-    top: 0;
+    /* 斜向旗条：以图标圆心 (28,28) 为锚点、绕中心旋转 45°，保证中线
+       正好斜穿圆形遮罩中心；两端由父级 overflow hidden + 圆角裁切到
+       胶囊边界（左上越过角落、右下越过底边） */
+    left: 28px;
+    top: 28px;
     width: 96px;
     height: 22px;
-    transform-origin: 0 0;
-    /* 不偏移：旗条中线正好穿过条目左上角 → 45° 后经过图标/遮罩圆心
-       (padding-left 16 + 图标半宽 12 = 28)，旗条居中衬在图标与遮罩之下 */
-    transform: rotate(45deg);
+    transform-origin: center center;
+    transform: translate(-50%, -50%) rotate(45deg);
     background: var(--pride-band);
     pointer-events: none;
     z-index: 0;
