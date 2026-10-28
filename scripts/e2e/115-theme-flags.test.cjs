@@ -1,5 +1,5 @@
 /**
- * e2e 115：骄傲主题（v3.0.1024）。
+ * e2e 115：骄傲主题（v3.0.1025）。
  *
  * - 主题内容并入 settings://display（旧 settings://display/theme 归一）；
  * - 预设色盘不含旗帜；
@@ -49,6 +49,8 @@ const h = require('./harness.cjs');
         disc: disc ? disc.backgroundColor : null,
         discDisplay: disc ? disc.display : null,
         discZ: disc ? disc.zIndex : null,
+        discBorderW: disc ? disc.borderTopWidth : null,
+        discBorderC: disc ? disc.borderTopColor : null,
         surface: getComputedStyle(document.documentElement).getPropertyValue('--md-sys-color-surface').trim(),
       };
     })()`)).value;
@@ -88,13 +90,25 @@ const h = require('./harness.cjs');
     // 图标圆形遮罩：位于旗标之上、图标之下，颜色 = 容器色加深一级
     h.assert.notStrictEqual(s1.discDisplay, 'none', '图标下应有圆形遮罩');
     h.assert.strictEqual(s1.discZ, '1', '遮罩层级应在旗标(0)与图标(2)之间');
-    h.assert.notStrictEqual(s1.disc, s1.bg, `遮罩色应与容器色不同（加深一级，实际 ${s1.disc}）`);
+    h.assert.notStrictEqual(s1.disc, s1.bg, `遮罩色应与容器色不同（浅一级，实际 ${s1.disc}）`);
+    h.assert.ok(parseFloat(s1.discBorderW) > 0, `遮罩应有细描边（实际 ${s1.discBorderW}）`);
+    h.assert.ok(/^(rgb|color)\(/.test(s1.discBorderC ?? '') && !/0, 0, 0, 0/.test(s1.discBorderC ?? ''),
+      `描边应使用旗条最外侧颜色（实际 ${s1.discBorderC}）`);
 
     // ── 3) 相邻两次不同色：重复点同一位置必须换色 ──
     await h.clickPlace(win, 'image');
     await h.sleep(450);
     const s1b = await prideState();
     h.assert.ok(s1b.color !== s1.color, `重复点击同一位置必须换色（${s1.color} → ${s1b.color}）`);
+
+    // ── 3b) 悬停不改变遮罩底色（遮罩只有一种状态） ──
+    const rect = (await h.js(win, `(() => { const el = document.querySelector('.sidebar-item.active'); const r = el.getBoundingClientRect(); return {x:r.x, y:r.y, w:r.width, h:r.height}; })()`)).value;
+    win.webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(rect.x + rect.w / 2), y: Math.round(rect.y + rect.h / 2) });
+    await h.sleep(500);
+    const hovered = (await h.js(win, `document.querySelector('.sidebar-item.active')?.matches(':hover') ?? false`)).value;
+    const sHover = await prideState();
+    h.assert.ok(hovered, '鼠标应已悬停在激活条目上');
+    h.assert.strictEqual(sHover.disc, s1b.disc, '悬停不应改变遮罩底色');
 
     // ── 4) 切到另一位置 → 旧条目复原，新条目随机且与上一次不同 ──
     await h.clickPlace(win, 'description');

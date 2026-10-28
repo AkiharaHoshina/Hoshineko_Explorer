@@ -316,15 +316,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     band: string;
     /** 容器色（随机旗色混 secondary-container，随主题即时重算） */
     container: string;
+    /** 圆形遮罩描边色 = 旗条最上方（最外侧）那一条旗色 */
+    ring: string;
   } | null>(null);
 
   /** 上一次用过的旗色：新颜色不得与它相同（用户定案） */
   const lastPrideRawRef = useRef<string | null>(null);
   /** 上一次用过的旗帜：换旗后重置去重基准 */
   const lastPrideFlagRef = useRef<string | null>(null);
-  /** 最近一次着色的条目 key：换旗时用它就地重掷（设置更改即时刷新） */
-  const lastPrideKeyRef = useRef<string | null>(null);
-
   /** 激活条目时掷一次旗色（相邻两次不得同色） */
   const rollPride = useCallback((key: string) => {
     const flag = findPrideFlag(prideAccent);
@@ -339,13 +338,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const raw = pool[Math.floor(Math.random() * pool.length)];
     lastPrideRawRef.current = raw;
     lastPrideFlagRef.current = flag.id;
-    lastPrideKeyRef.current = key;
     setPridePick({
       accent: flag.id,
       key,
       raw,
       band: buildPrideBand(flag.stripes),
       container: buildPrideContainer(raw),
+      ring: flag.stripes[0],
     });
   }, [prideAccent]);
 
@@ -378,6 +377,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       style: {
         "--pride-container": pridePick.container,
         "--pride-band": pridePick.band,
+        "--pride-ring": pridePick.ring,
       } as React.CSSProperties,
       "data-pride-flag": pridePick.accent ?? undefined,
       "data-pride-color": pridePick.raw,

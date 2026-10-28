@@ -519,16 +519,14 @@
     top: 12px;
     width: 32px;
     height: 32px;
+    box-sizing: border-box;
     border-radius: 50%;
+    /* 细描边 = 旗条最上方（最外侧）那条旗色（--pride-ring，inline） */
+    border: 1.5px solid var(--pride-ring);
+    /* 只有一种状态：始终是容器色浅一级——不随悬停变化（用户定案） */
     background-color: color-mix(in srgb, #fff 14%, var(--pride-container));
     pointer-events: none;
     z-index: 1;
-}
-
-/* 悬停时条目底色被 .sidebar-item:hover 覆盖为 surface-container-highest，
-   遮罩跟随实际底色重新提亮 */
-.sidebar-item[data-pride-flag]:hover::after {
-    background-color: color-mix(in srgb, #fff 14%, var(--md-sys-color-surface-container-highest));
 }
 
 .sidebar-item[data-pride-flag] > * {

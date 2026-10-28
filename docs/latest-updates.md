@@ -1,5 +1,18 @@
 # 更新日志
 
+## v3.0.1025 — 骄傲圆形遮罩固定单一状态 + 旗色细描边
+
+- 版本号升至 `3.0.1025`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1025.AppImage` / `HoshinekoFM-3.0.1025-size.AppImage`。
+- **遮罩只有一种状态**：删除 `:hover::after` 规则——此前悬停时遮罩改用
+  `surface-container-highest` 提亮，与常态形成两种颜色；现在无论鼠标是否悬停，
+  遮罩始终是按钮底色浅一级（`color-mix(in srgb, #fff 14%, var(--pride-container))`）。
+- **遮罩加 1.5px 细描边**：颜色取旗条最上方（最外侧）那条旗色，
+  `prideAttrs` 新增内联变量 `--pride-ring`（= `flag.stripes[0]`），
+  `::after` 用 `border: 1.5px solid var(--pride-ring)` + `box-sizing: border-box`
+  （不改变 32px 外径；设备像素比 1 下渲染为 1px）。
+- e2e 115 增补：描边宽度 > 0 且颜色为实色、`matches(':hover')` 成立时遮罩底色不变。
+
 ## v3.0.1024 — 骄傲旗条对准圆心 + 冷启动/新窗口自动着色
 
 - 版本号升至 `3.0.1024`；AppImage 产物名变为
