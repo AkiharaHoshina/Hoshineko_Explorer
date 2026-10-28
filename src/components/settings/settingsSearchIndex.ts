@@ -45,6 +45,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { rowId: 'files-filled-icons', cat: 'files', section: 'settings.appearance', labelKey: 'settings.filled_icons', icon: 'favorite', keywords: ['实心图标', 'filled'] },
   { rowId: 'files-marquee-text', cat: 'files', section: 'settings.appearance', labelKey: 'settings.marquee_text', icon: 'play_arrow', keywords: ['滚动文本', '跑马灯', 'marquee'] },
   { rowId: 'files-sort-auto-collapse', cat: 'files', section: 'settings.appearance', labelKey: 'settings.sort_auto_collapse', icon: 'compress', keywords: ['自动收缩', '折叠', '更多按钮', 'collapse'] },
+  { rowId: 'files-drag-action', cat: 'files', section: 'settings.behavior', labelKey: 'settings.drag_action', subKey: 'settings.drag_action_desc', icon: 'drag_pan', keywords: ['拖拽', '拖动', '复制', '移动', '询问', 'drag', 'drop', 'copy', 'move'] },
   { rowId: 'files-new-tab-path', cat: 'files', section: 'settings.behavior', labelKey: 'settings.new_tab_path', icon: 'tab', keywords: ['新建标签页目录', 'new tab'] },
   { rowId: 'files-open-rule-manager', cat: 'files', section: 'settings.behavior', labelKey: 'settings.open_rule_manager', subKey: 'settings.open_rule_manager_desc', icon: 'open_with', keywords: ['打开方式', '默认打开方式', 'open with'] },
   { rowId: 'files-thumb-cache', cat: 'files', section: 'settings.behavior', labelKey: 'settings.thumb_cache', icon: 'image', keywords: ['缩略图缓存', 'thumbnail', 'cache'] },

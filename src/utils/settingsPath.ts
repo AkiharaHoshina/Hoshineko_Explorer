@@ -28,7 +28,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   // 导航（v3.0.1007 起）：原「仪表盘」分类并入；内建终端与对象面板的
   // 设置项移入本页作为分区，旧路径经 LEGACY_CAT_ALIASES 重定向
   { id: 'navigation', labelKey: 'settings.cat_navigation', icon: 'explore', count: 8 },
-  { id: 'files', labelKey: 'settings.cat_files', icon: 'folder', count: 9 },
+  { id: 'files', labelKey: 'settings.cat_files', icon: 'folder', count: 10 },
   { id: 'display', labelKey: 'settings.cat_display', icon: 'palette', count: 3 },
   { id: 'search', labelKey: 'settings.cat_search', icon: 'search', count: 4 },
   { id: 'portal', labelKey: 'settings.cat_portal', icon: 'integration_instructions', count: 3 },

@@ -15,7 +15,7 @@ import { Sidebar, type SidebarPinnedItem } from "./components/Sidebar";
 import type { PinnedItem } from "./components/Dashboard";
 import { Icon } from "./components/Icon";
 /* eslint-disable react-hooks/preserve-manual-memoization -- React Compiler 对超大型组件（AppContent ~3300 行，review 26 设置页面化后再度越过阈值）bail out，依赖数组由源码人工维护（该规则仅在编译跳过时审计） */
-import { SettingsContext } from "./contexts/SettingsContext";
+import { SettingsContext, type DragFileAction } from "./contexts/SettingsContext";
 import { ContextMenu } from "./components/ContextMenu";
 import type { ContextMenuItem } from "./components/ContextMenu";
 import { HoshinekoNyaDialog } from "./components/HoshinekoNyaDialog";
@@ -763,6 +763,14 @@ function AppContent() {
   const [showHiddenFiles, setShowHiddenFiles] = useLocalStorage<boolean>(
     "settings.showHiddenFiles",
     true,
+  );
+  /**
+   * 应用内拖拽文件行为（设置 → 文件 → 行为）：'ask' 每次询问（默认）、
+   * 'copy' 复制、'move' 移动。跨应用拖放不受此设置影响。
+   */
+  const [dragFileAction, setDragFileAction] = useLocalStorage<DragFileAction>(
+    "settings.dragFileAction",
+    "ask",
   );
   const [iconSize, setIconSize] = useLocalStorage<number>(
     "settings.iconSize",
@@ -1760,6 +1768,7 @@ function AppContent() {
   const handleRestoreDefaults = useCallback(() => {
     handleLocaleChange("auto");
     setShowHiddenFiles(true);
+    setDragFileAction("ask");
     setViewMode("list");
     setIconSize(48);
     setUiScale(100);
@@ -1791,6 +1800,7 @@ function AppContent() {
   }, [
     handleLocaleChange,
     setShowHiddenFiles,
+    setDragFileAction,
     setViewMode,
     setIconSize,
     setUiScale,
@@ -2714,6 +2724,8 @@ function AppContent() {
         previewCollapsed,
         setPreviewCollapsed,
         groupingEnabled,
+        dragFileAction,
+        setDragFileAction,
         showHiddenFiles,
         setShowHiddenFiles,
         newTabPath,
@@ -2857,6 +2869,7 @@ function AppContent() {
                     onConfirmDialog={confirm}
                     onDragAction={requestDragAction}
                     showHiddenFiles={showHiddenFiles}
+                    dragFileAction={dragFileAction}
                     iconSize={iconSize}
                     viewMode={viewMode}
                     filledIcons={filledIcons}

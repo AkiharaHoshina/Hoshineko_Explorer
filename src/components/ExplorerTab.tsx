@@ -127,8 +127,14 @@ interface ExplorerTabProps {
     onConflictDialog: (conflicts: ConflictEntry[], destDir: string, existingNames: string[], sourcePath?: string, operation?: "move" | "copy") => Promise<ConflictResult>;
     /** M3 确认对话框（替代 window.confirm 系统对话框） */
     onConfirmDialog: (title: string, message: string) => Promise<boolean>;
-    /** M3 拖拽动作选择对话框（移动/复制/取消），所有窗口内/跨窗口拖放落点都会询问 */
+    /** M3 拖拽动作选择对话框（移动/复制/取消）：仅 dragFileAction === 'ask' 时使用 */
     onDragAction: (title: string, message: string) => Promise<'move' | 'copy' | null>;
+    /**
+     * 应用内拖拽文件行为（设置 → 文件 → 行为）：
+     * `'ask'` 弹移动/复制询问（默认）、`'copy'` 直接复制、`'move'` 直接移动。
+     * 忽略 Shift 修饰键；跨应用拖放不走此设置。
+     */
+    dragFileAction: 'ask' | 'copy' | 'move';
     showHiddenFiles: boolean;
     iconSize: number;
     viewMode: 'grid' | 'list';
@@ -277,7 +283,7 @@ interface ExplorerTabProps {
     terminalOpen?: boolean;
 }
 
-export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onContextMenu, onBgMenuItems, onOpenWithFile, onPropertiesFile, onOpenTerminalAt, onRevealFile, onCreateDialog, onConflictDialog, onConfirmDialog, onDragAction, showHiddenFiles, iconSize, viewMode, filledIcons, sortBy, sortOrder, groupingEnabled, searchGroupByDir, searchLimit, searchTimeout, onSortByChange, onSortOrderChange, onGroupingToggle, onViewModeChange, sortControlsCollapsed, sortControlsAutoCollapse, onSortControlsCollapsedChange, sparklineWindowSeconds, refreshSignal, scrollToFileName, onScrollToComplete, onMountDevice, onUnmountDevice, onEjectDevice, onTerminateProcess, onNiceProcess, onUnlockPrivileged, onPinObject, onPinSettings, onSearchContextMenu, onBatchTerminate, onBatchNice, objectClassOrder, onObjectClassOrderChange, alertTempC, alertDiskPct, objectSearchHistory, onObjectSearchRecord, onObjectSearchHistoryClear, fileSearchHistory, onFileSearchRecord, onFileSearchHistoryClear, settingsSearchHistory, onSettingsSearchRecord, onSettingsSearchHistoryClear, searchRecentCount, onNetworkToggle, marqueeEnabled, pendingDrop, onPendingDropHandled, dashboardPinned, onDashboardPinItem, onDashboardRemovePin, onDashboardReorderPin, onDashboardPinObject, onMovePinAcross, showHomeStorageUsage, filePreviewEnabled, previewWidth, onPreviewWidthChange, pendingPropertiesPath, onPropertiesComplete, terminalOpen = false }: ExplorerTabProps) {
+export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onContextMenu, onBgMenuItems, onOpenWithFile, onPropertiesFile, onOpenTerminalAt, onRevealFile, onCreateDialog, onConflictDialog, onConfirmDialog, onDragAction, dragFileAction, showHiddenFiles, iconSize, viewMode, filledIcons, sortBy, sortOrder, groupingEnabled, searchGroupByDir, searchLimit, searchTimeout, onSortByChange, onSortOrderChange, onGroupingToggle, onViewModeChange, sortControlsCollapsed, sortControlsAutoCollapse, onSortControlsCollapsedChange, sparklineWindowSeconds, refreshSignal, scrollToFileName, onScrollToComplete, onMountDevice, onUnmountDevice, onEjectDevice, onTerminateProcess, onNiceProcess, onUnlockPrivileged, onPinObject, onPinSettings, onSearchContextMenu, onBatchTerminate, onBatchNice, objectClassOrder, onObjectClassOrderChange, alertTempC, alertDiskPct, objectSearchHistory, onObjectSearchRecord, onObjectSearchHistoryClear, fileSearchHistory, onFileSearchRecord, onFileSearchHistoryClear, settingsSearchHistory, onSettingsSearchRecord, onSettingsSearchHistoryClear, searchRecentCount, onNetworkToggle, marqueeEnabled, pendingDrop, onPendingDropHandled, dashboardPinned, onDashboardPinItem, onDashboardRemovePin, onDashboardReorderPin, onDashboardPinObject, onMovePinAcross, showHomeStorageUsage, filePreviewEnabled, previewWidth, onPreviewWidthChange, pendingPropertiesPath, onPropertiesComplete, terminalOpen = false }: ExplorerTabProps) {
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [files, setFiles] = useState<IFile[]>([]);
   const [hoveredFile, setHoveredFile] = useState<IFile | null>(null);
@@ -1228,19 +1234,23 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
       const isTrashDrag = trashNames.length > 0;
 
       if (isTrashDrag) {
+        // 回收站拖出 = 还原：独立确认框，不受「拖拽文件行为」设置影响
         const ok = await onConfirmDialog(
           t('drag.trash_restore_title'),
           t('drag.trash_restore_message', targetPath),
         );
         if (!ok) return;
         operation = 'move';
-      } else {
+      } else if (dragFileAction === 'ask') {
         const choice = await onDragAction(
           t('drag.action_title'),
           t('drag.action_message', entries.length, targetPath),
         );
         if (choice === null) return;
         operation = choice;
+      } else {
+        // 设置为固定动作：直接执行，不弹窗、不理会 Shift（用户定案：可预测）
+        operation = dragFileAction;
       }
 
       const existingNames = targetDirFiles.map((f) => f.name);
@@ -1342,7 +1352,7 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
         loadPath(currentPath);
       });
     },
-    [onConflictDialog, onConfirmDialog, onDragAction, loadPath, currentPath],
+    [onConflictDialog, onConfirmDialog, onDragAction, dragFileAction, loadPath, currentPath],
   );
 
   /**

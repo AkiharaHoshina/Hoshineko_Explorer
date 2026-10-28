@@ -209,6 +209,11 @@ const zhAC = {
   'settings.preview_expand': '展开预览',
   // ── 设置弹窗-新增-修改于7月3日第二版 ──
   'settings.behavior': '行为',
+  'settings.drag_action': '拖拽文件行为',
+  'settings.drag_action_desc': '在应用内把文件拖到文件夹时执行的操作（跨应用拖放不受影响）',
+  'settings.drag_action_ask': '每次询问',
+  'settings.drag_action_copy': '复制',
+  'settings.drag_action_move': '移动',
   'settings.language': '淫语',
   'settings.marquee_text': '滚动文本',
   'settings.sparkline_window': '走势图时间范围',

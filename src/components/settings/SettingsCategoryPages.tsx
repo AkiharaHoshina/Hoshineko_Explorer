@@ -13,7 +13,7 @@ import { formatNewTabPath } from '../../utils/newTabPath';
 import { THEME_PRESETS, type ThemeConfig } from '../../types/theme';
 import { showToast } from '../../utils/toast';
 import { useSettings } from '../../contexts/SettingsContext';
-import { SettingsSection, SettingsRow, SettingsSwitchRow, ThreeStateSwitchRow } from './SettingsShared';
+import { SettingsSection, SettingsRow, SettingsSelectRow, SettingsSwitchRow, ThreeStateSwitchRow } from './SettingsShared';
 /** 贡献者头像（仓库根 assets/ 资源经 Vite 导入；关于页圆形按钮内铺满显示） */
 import hoshinaAvatar from '../../../assets/hoshina.jpg';
 import sbchildAvatar from '../../../assets/sbchild.jpg';
@@ -237,6 +237,20 @@ export const FilesSettings: React.FC = () => {
       </SettingsSection>
 
       <SettingsSection title={t('settings.behavior')}>
+        <SettingsSelectRow
+          icon="drag_pan"
+          label={t('settings.drag_action')}
+          sub={t('settings.drag_action_desc')}
+          rowId="files-drag-action"
+          value={s.dragFileAction}
+          onChange={(v) => s.setDragFileAction(v as 'ask' | 'copy' | 'move')}
+          options={[
+            { value: 'ask', label: t('settings.drag_action_ask') },
+            { value: 'copy', label: t('settings.drag_action_copy') },
+            { value: 'move', label: t('settings.drag_action_move') },
+          ]}
+        />
+
         <SettingsRow
           icon="tab"
           label={t('settings.new_tab_path')}

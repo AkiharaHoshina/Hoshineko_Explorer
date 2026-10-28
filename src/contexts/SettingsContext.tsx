@@ -50,6 +50,15 @@ export interface SettingsContextValue {
   /** 语义分组（应用值——预览区显示分组头；顶栏开关非设置项） */
   groupingEnabled: boolean;
   // ── 文件：行为 ──
+  /**
+   * 应用内拖拽文件行为（设置 → 文件 → 行为）：
+   * - `'ask'`（默认）：拖到文件夹时弹「移动 / 复制 / 取消」对话框；
+   * - `'copy'` / `'move'`：直接按该动作执行，不弹窗。
+   * **只管应用内**（同窗口/本应用其他窗口）；跨应用拖放不走此设置
+   * （拖入=复制，拖出=原生 DnD）。Shift 不覆盖此设置。
+   */
+  dragFileAction: DragFileAction;
+  setDragFileAction: (v: DragFileAction) => void;
   showHiddenFiles: boolean;
   setShowHiddenFiles: (v: boolean) => void;
   newTabPath: string;
@@ -136,6 +145,9 @@ export interface SettingsContextValue {
   thumbCacheBusy: boolean;
   clearThumbCache: () => void;
 }
+
+/** 应用内拖拽文件行为（见 SettingsContextValue.dragFileAction） */
+export type DragFileAction = 'ask' | 'copy' | 'move';
 
 /** 设置中枢 Context（App 提供；设置页/二级对话框消费） */
 export const SettingsContext = createContext<SettingsContextValue | null>(null);

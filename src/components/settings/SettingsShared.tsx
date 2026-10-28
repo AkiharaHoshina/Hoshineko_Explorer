@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import type { MdSwitch as MdSwitchElement } from '@material/web/switch/switch.js';
 import { Icon } from '../Icon';
 import { Button } from '../Button';
-import { Switch } from '../md';
+import { OutlinedSelect, SelectOption, Switch } from '../md';
 import { t } from '../../i18n';
 
 /**
@@ -55,6 +55,38 @@ export const SettingsRow: React.FC<SettingsRowProps> = ({
     </div>
     {children}
   </div>
+);
+
+interface SettingsSelectRowProps {
+  icon?: string;
+  label: string;
+  sub?: React.ReactNode;
+  /** 设置搜索索引行 id（SettingsRow.rowId 透传——两处登记约定） */
+  rowId?: string;
+  /** 当前值（受控） */
+  value: string;
+  /** 选项：value 与 onChange 回传同值 */
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}
+
+/** 下拉选择行（右侧 md-outlined-select，立即生效） */
+export const SettingsSelectRow: React.FC<SettingsSelectRowProps> = ({
+  icon, label, sub, rowId, value, options, onChange,
+}) => (
+  <SettingsRow icon={icon} label={label} sub={sub} rowId={rowId}>
+    <OutlinedSelect
+      className="settings-select"
+      value={value}
+      onInput={(e) => onChange((e.target as HTMLSelectElement).value)}
+    >
+      {options.map((o) => (
+        <SelectOption key={o.value} value={o.value}>
+          <div slot="headline">{o.label}</div>
+        </SelectOption>
+      ))}
+    </OutlinedSelect>
+  </SettingsRow>
 );
 
 interface SettingsSwitchRowProps {
