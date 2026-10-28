@@ -1,5 +1,17 @@
 # 更新日志
 
+## v3.0.1028 — 骄傲遮罩描边改为「胶囊底色加深色」+ 跨性别白名单
+
+- 版本号升至 `3.0.1028`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1028.AppImage` / `HoshinekoFM-3.0.1028-size.AppImage`。
+- **描边规则（用户定案）**：默认取**当前胶囊底色加深一级**
+  （`color-mix(in srgb, #000 14%, var(--pride-container))`，随主题/随机容器色即时重算），
+  不再用旗条首色；**白名单**跨性别旗用白色
+  （`.sidebar-item[data-pride-flag="transgender"]::after { border-color: #fff }`）。
+- 内联变量 `--pride-ring` 与 `pridePick.ring` 随之删除——描边色完全由 CSS
+  从 `--pride-container` 派生，JS 不再需要知道描边规则。
+- e2e 115：跨性别描边为白、换骄傲旗后非白且 ≠ 容器底色、切主题后仍为实色。
+
 ## v3.0.1027 — 骄傲遮罩描边改回旗色 + 特殊主题代码清理
 
 - 版本号升至 `3.0.1027`；AppImage 产物名变为
