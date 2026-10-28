@@ -485,11 +485,11 @@
  * ::before 铺满条目（继承圆角），条纹比例由 --pride-gradient（inline）给出；
  * 渐变另一端是 var(--md-sys-color-surface-container)，所以明暗主题切换时
  * 会自动重算——不再有"切主题后颜色不刷新"的问题。文字/图标抬到上层。 */
-.sidebar-item[data-pride-color] {
+.sidebar-item[data-pride-flag] {
     position: relative;
 }
 
-.sidebar-item[data-pride-color]::before {
+.sidebar-item[data-pride-flag]::before {
     content: '';
     position: absolute;
     inset: 0;
@@ -498,7 +498,7 @@
     pointer-events: none;
 }
 
-.sidebar-item[data-pride-color] > * {
+.sidebar-item[data-pride-flag] > * {
     position: relative;
     z-index: 1;
 }

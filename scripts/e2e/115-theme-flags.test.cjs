@@ -1,18 +1,18 @@
 /**
- * e2e 115：主题改版（v3.0.1016）。
+ * e2e 115：骄傲主题（v3.0.1019）。
  *
  * - 主题内容并入 settings://display（旧 settings://display/theme 归一）；
- * - 预设色盘不再含旗帜（旧整页 flag 主题已推翻）；
- * - 「骄傲主题」设置项：选择旗帜后，每次激活左侧栏条目都给**当前条目**
- *   随机套一个旗色（弱化混色 + 黑/白文字自适应）；切走复原；收起态同样生效；
- *   选「无」时不着色。
+ * - 预设色盘不含旗帜；
+ * - 「骄傲主题」设置项：激活左侧栏条目时，当前条目铺满该旗的**硬边条纹**
+ *   （无随机、渲染确定）；切走复原；收起态同样生效；选「无」不着色；
+ * - 切明暗主题时底纹必须即时重算（内容由 CSS 变量求值）。
  */
 const h = require('./harness.cjs');
 
 (async () => {
   await h.setupApp();
 
-  await h.run('115 骄傲主题：侧边栏随机旗色 + 旧子页归一', async () => {
+  await h.run('115 骄傲主题：整面旗条纹 + 主题切换刷新', async () => {
     const dir = h.tempDir();
     h.makeFileTree(dir, { 'a.txt': 'x' });
     const win = await h.createTestWindow({ argv: ['electron', dir] });
@@ -29,22 +29,22 @@ const h = require('./harness.cjs');
       await h.sleep(400);
     };
 
-    /** 当前带骄傲底色的条目信息 */
+    /** 当前带骄傲底纹的条目信息 */
     const prideState = async () => (await h.js(win, `(() => {
-      const marked = [...document.querySelectorAll('[data-pride-color]')];
+      const marked = [...document.querySelectorAll('[data-pride-flag]')];
       const active = document.querySelector('.sidebar-item.active');
       const cs = active ? getComputedStyle(active) : null;
       const before = active ? getComputedStyle(active, '::before') : null;
       return {
         count: marked.length,
-        raw: active?.dataset.prideColor ?? null,
+        flag: active?.dataset.prideFlag ?? null,
         icon: active?.querySelector('md-icon')?.textContent ?? null,
-        bg: cs ? cs.backgroundColor : null,
         fg: cs ? cs.color : null,
         gradient: before ? before.backgroundImage : null,
         surface: getComputedStyle(document.documentElement).getPropertyValue('--md-sys-color-surface').trim(),
       };
     })()`)).value;
+    const stopCount = (g) => ((g ?? '').match(/color\(/g) ?? []).length;
 
     // ── 1) 设置页：旗帜不再是预设；骄傲主题行存在且选项齐全 ──
     await setPride('transgender');
@@ -65,48 +65,44 @@ const h = require('./harness.cjs');
     h.assert.ok(ui.options.length >= 10, `骄傲主题应有多种旗帜可选（实际 ${ui.options.length}）`);
     h.assert.strictEqual(ui.value, 'transgender', '下拉应反映当前设置');
 
-    // ── 2) 点击位置 → 当前条目带旗色，且只有它一个 ──
+    // ── 2) 点击位置 → 当前条目铺上整面旗（跨性别 5 条硬边色带） ──
     await h.clickPlace(win, 'image');
     await h.sleep(500);
     const s1 = await prideState();
     h.assert.strictEqual(s1.icon, 'image', '应切到图片位置');
-    h.assert.strictEqual(s1.count, 1, '只应有当前条目带骄傲底色');
-    h.assert.ok(['#5BCEFA', '#F5A9B8', '#FFFFFF'].includes(s1.raw), `旗色应取自跨性别色库（实际 ${s1.raw}）`);
-    // 整面旗条纹：跨性别 5 条 → ::before 渐变里应有 5 个色标
-    h.assert.ok(/linear-gradient/.test(s1.gradient ?? ''), '条目应有整面旗渐变背景');
-    h.assert.ok(((s1.gradient ?? '').match(/color\(/g) ?? []).length >= 5,
-      `跨性别旗应有 5 条色带（实际 ${(s1.gradient ?? '').match(/color\(/g)?.length ?? 0}）`);
+    h.assert.strictEqual(s1.count, 1, '只应有当前条目带骄傲底纹');
+    h.assert.strictEqual(s1.flag, 'transgender', '条目应标记当前旗帜 id');
+    h.assert.ok(/linear-gradient/.test(s1.gradient ?? ''), '条目应有整面旗条纹背景');
+    // 硬边条纹 = 每条带两个色标 → 5 条共 10 个色标
+    h.assert.ok(stopCount(s1.gradient) >= 10, `应渲染 5 条硬边色带（色标 ${stopCount(s1.gradient)}）`);
 
-    // ── 2b) 切换明暗主题 → 骄傲底色必须立刻跟着刷新（不再内联死色） ──
+    // ── 3) 渲染确定：重复点同一位置，底纹不变（无随机） ──
+    await h.clickPlace(win, 'image');
+    await h.sleep(400);
+    const s1b = await prideState();
+    h.assert.strictEqual(s1b.gradient, s1.gradient, '同一旗帜下重复点击底纹应完全一致（无随机）');
+
+    // ── 4) 切到另一位置 → 旧条目复原，新条目同样铺满整面旗 ──
+    await h.clickPlace(win, 'description');
+    await h.sleep(500);
+    const s2 = await prideState();
+    h.assert.strictEqual(s2.icon, 'description', '应切到文档位置');
+    h.assert.strictEqual(s2.count, 1, '切走后旧条目不应保留底纹');
+    h.assert.strictEqual(s2.gradient, s1.gradient, '同一旗帜下不同条目底纹一致');
+
+    // ── 5) 切换明暗主题 → 底纹与文字色必须立刻刷新 ──
     await h.js(win, `window.electron.setThemeSource('light'); true`);
     await h.sleep(900);
     const sLight = await prideState();
-    h.assert.ok(sLight.surface !== s1.surface, '切换亮色后主题 surface 应变化');
-    h.assert.ok(sLight.gradient !== s1.gradient, '切换亮色后骄傲底纹应重算（不能沿用暗色值）');
-    h.assert.ok(sLight.fg !== s1.fg, '文字色应随主题更新');
+    h.assert.ok(sLight.surface !== s2.surface, '切换亮色后主题 surface 应变化');
+    h.assert.ok(sLight.gradient !== s2.gradient, '切换亮色后骄傲底纹应重算（不能沿用暗色值）');
+    h.assert.ok(sLight.fg !== s2.fg, '文字色应随主题更新');
     await h.js(win, `window.electron.setThemeSource('dark'); true`);
     await h.sleep(900);
     const sBack = await prideState();
     h.assert.ok(sBack.gradient !== sLight.gradient, '切回暗色后骄傲底纹应再次重算');
 
-    // ── 3) 重复点同一位置 → 颜色必须变化（用户定案：非真随机，不与上一次相同） ──
-    await h.clickPlace(win, 'image');
-    await h.sleep(500);
-    const s1b = await prideState();
-    h.assert.strictEqual(s1b.icon, 'image', '重复点击应仍在图片位置');
-    h.assert.ok(s1b.raw !== null, '重复点击后仍应带骄傲底色');
-    h.assert.ok(s1b.raw !== s1.raw, `重复点击同一位置必须换色（${s1.raw} → ${s1b.raw}）`);
-
-    // ── 4) 切到另一位置 → 旧条目复原，新条目带色且与上一次不同 ──
-    await h.clickPlace(win, 'description');
-    await h.sleep(500);
-    const s2 = await prideState();
-    h.assert.strictEqual(s2.icon, 'description', '应切到文档位置');
-    h.assert.strictEqual(s2.count, 1, '切走后旧条目不应保留颜色');
-    h.assert.ok(s2.raw !== null, '新激活条目应带骄傲底色');
-    h.assert.ok(s2.raw !== s1b.raw, `切换后的颜色不得与切换前相同（${s1b.raw} → ${s2.raw}）`);
-
-    // ── 5) 收起态（图标轨道）同样生效 ──
+    // ── 6) 收起态（图标轨道）同样生效 ──
     await h.clickEl(win, '.sidebar-collapse-btn');
     await h.sleep(400);
     h.assert.ok(
@@ -117,17 +113,17 @@ const h = require('./harness.cjs');
     await h.sleep(500);
     const s3 = await prideState();
     h.assert.strictEqual(s3.icon, 'image', '收起态也应能切换位置');
-    h.assert.strictEqual(s3.count, 1, '收起态同样只应有当前条目带色');
-    h.assert.ok(['#5BCEFA', '#F5A9B8', '#FFFFFF'].includes(s3.raw), `收起态旗色应来自色库（实际 ${s3.raw}）`);
+    h.assert.strictEqual(s3.count, 1, '收起态同样只应有当前条目带底纹');
+    h.assert.strictEqual(s3.flag, 'transgender', '收起态同样应用当前旗帜');
 
-    // ── 6) 设为「无」→ 不再着色 ──
+    // ── 7) 设为「无」→ 不再着色 ──
     await setPride(null);
     await h.clickPlace(win, 'home');
     await h.sleep(500);
     const s4 = await prideState();
-    h.assert.strictEqual(s4.count, 0, '「无」时不应有任何骄傲底色');
+    h.assert.strictEqual(s4.count, 0, '「无」时不应有任何骄傲底纹');
 
-    // ── 7) 旧子页链接归一（settings://display/theme → settings://display） ──
+    // ── 8) 旧子页链接归一（settings://display/theme → settings://display） ──
     await h.clickEl(win, '.omnibar-trigger');
     await h.waitFor(win, `!!document.querySelector('.omnibar.mode-edit .omnibar-input')`);
     await h.setReactInput(win, '.omnibar.mode-edit .omnibar-input', 'settings://display/theme');
