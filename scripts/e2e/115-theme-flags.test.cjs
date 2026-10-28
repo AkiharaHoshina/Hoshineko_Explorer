@@ -1,5 +1,5 @@
 /**
- * e2e 115：骄傲主题（v3.0.1025）。
+ * e2e 115：骄傲主题（v3.0.1026）。
  *
  * - 主题内容并入 settings://display（旧 settings://display/theme 归一）；
  * - 预设色盘不含旗帜；
@@ -92,8 +92,9 @@ const h = require('./harness.cjs');
     h.assert.strictEqual(s1.discZ, '1', '遮罩层级应在旗标(0)与图标(2)之间');
     h.assert.notStrictEqual(s1.disc, s1.bg, `遮罩色应与容器色不同（浅一级，实际 ${s1.disc}）`);
     h.assert.ok(parseFloat(s1.discBorderW) > 0, `遮罩应有细描边（实际 ${s1.discBorderW}）`);
-    h.assert.ok(/^(rgb|color)\(/.test(s1.discBorderC ?? '') && !/0, 0, 0, 0/.test(s1.discBorderC ?? ''),
-      `描边应使用旗条最外侧颜色（实际 ${s1.discBorderC}）`);
+    h.assert.ok(parseFloat(s1.discBorderW) >= 2, '描边应加粗到 2px');
+    h.assert.ok(/255, 255, 255|srgb 1 1 1/.test(s1.discBorderC ?? ''),
+      `深色主题描边应为白色（实际 ${s1.discBorderC}）`);
 
     // ── 3) 相邻两次不同色：重复点同一位置必须换色 ──
     await h.clickPlace(win, 'image');
@@ -155,6 +156,8 @@ const h = require('./harness.cjs');
     h.assert.ok(sLight.bg !== afterSwitch.bg, '切换亮色后容器色应重算');
     h.assert.ok(sLight.fg !== afterSwitch.fg, '文字色应随主题更新');
     h.assert.strictEqual(sLight.band, afterSwitch.band, '旗标是旗色本色，不应随主题变化');
+    h.assert.ok(/rgb\(0, 0, 0\)|srgb 0 0 0/.test(sLight.discBorderC ?? ''),
+      `浅色主题描边应为黑色（实际 ${sLight.discBorderC}）`);
     await h.js(win, `window.electron.setThemeSource('dark'); true`);
     await h.sleep(900);
 

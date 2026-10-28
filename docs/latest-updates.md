@@ -1,5 +1,14 @@
 # 更新日志
 
+## v3.0.1026 — 骄傲圆形遮罩描边加粗并跟随明暗主题
+
+- 版本号升至 `3.0.1026`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1026.AppImage` / `HoshinekoFM-3.0.1026-size.AppImage`。
+- 描边由 1.5px 加粗到 **2px**；颜色改为跟随主题明暗：**深色主题白色、浅色主题黑色**
+  （默认 `#fff`，`@media (prefers-color-scheme: light)` 覆盖为 `#000`，与主题 CSS
+  的明暗约定一致；内联变量 `--pride-ring` 与 `pridePick.ring` 一并删除）。
+- e2e 115 断言改为：描边 ≥ 2px、深色下为白、切浅色后为黑。
+
 ## v3.0.1025 — 骄傲圆形遮罩固定单一状态 + 旗色细描边
 
 - 版本号升至 `3.0.1025`；AppImage 产物名变为
@@ -7,7 +16,7 @@
 - **遮罩只有一种状态**：删除 `:hover::after` 规则——此前悬停时遮罩改用
   `surface-container-highest` 提亮，与常态形成两种颜色；现在无论鼠标是否悬停，
   遮罩始终是按钮底色浅一级（`color-mix(in srgb, #fff 14%, var(--pride-container))`）。
-- **遮罩加 1.5px 细描边**：颜色取旗条最上方（最外侧）那条旗色，
+- **遮罩加 1.5px 细描边**（v3.0.1026 改为 2px 明暗黑白）：颜色取旗条最上方（最外侧）那条旗色，
   `prideAttrs` 新增内联变量 `--pride-ring`（= `flag.stripes[0]`），
   `::after` 用 `border: 1.5px solid var(--pride-ring)` + `box-sizing: border-box`
   （不改变 32px 外径；设备像素比 1 下渲染为 1px）。

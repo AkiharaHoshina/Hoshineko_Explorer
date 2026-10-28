@@ -316,8 +316,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     band: string;
     /** 容器色（随机旗色混 secondary-container，随主题即时重算） */
     container: string;
-    /** 圆形遮罩描边色 = 旗条最上方（最外侧）那一条旗色 */
-    ring: string;
   } | null>(null);
 
   /** 上一次用过的旗色：新颜色不得与它相同（用户定案） */
@@ -344,7 +342,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       raw,
       band: buildPrideBand(flag.stripes),
       container: buildPrideContainer(raw),
-      ring: flag.stripes[0],
     });
   }, [prideAccent]);
 
@@ -377,7 +374,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       style: {
         "--pride-container": pridePick.container,
         "--pride-band": pridePick.band,
-        "--pride-ring": pridePick.ring,
       } as React.CSSProperties,
       "data-pride-flag": pridePick.accent ?? undefined,
       "data-pride-color": pridePick.raw,
