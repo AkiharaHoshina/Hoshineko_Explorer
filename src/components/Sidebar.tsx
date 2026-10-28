@@ -236,23 +236,25 @@ function findDeviceByPath(list: AllDevice[], devicePath: string): AllDevice | nu
 }
 
 /**
- * 骄傲主题的背景（v3.0.1020，方案 A+C）：**容器色 + 左侧旗条**。
+ * 骄傲主题的背景（v3.0.1021）：**随机容器色 + 左上角斜向旗标**。
  *
- * - 容器色：旗首色按 24% 混进 `secondary-container`（M3 选中态容器色），
- *   "这条被这面旗染色"，文字仍用 `on-secondary-container`，对比度安全；
- * - 旗条：左侧 5px 竖向**全饱和**硬边条纹，识别旗帜本身；
- * - 两者都由 CSS 变量求值 → 明暗主题切换即时重算，不写死 rgb。
+ * - 容器色：**每次激活条目**从旗色库里随机取一色（相邻两次不同色），
+ *   按 24% 混进 `secondary-container` —— M3 选中态容器语义，文字用
+ *   `on-secondary-container`，随机不影响对比度；
+ * - 旗标：左上角 18px 的小方块旋转 45°，内部为**全饱和硬边**条纹
+ *   （不插值、不模糊），落在胶囊内部、不与图标打架；
+ * - 两者都由 CSS 变量求值 → 明暗主题切换 / 换旗即时重算，不写死 rgb。
  */
-function buildPrideBar(stripes: string[]): string {
+function buildPrideBand(stripes: string[]): string {
   const seg = 100 / stripes.length;
   const stops: string[] = [];
   stripes.forEach((c, i) => stops.push(`${c} ${i * seg}%`, `${c} ${(i + 1) * seg}%`));
   return `linear-gradient(to bottom, ${stops.join(', ')})`;
 }
 
-/** 容器色：旗首色 24% 混进 M3 选中态容器色 */
-function buildPrideContainer(primary: string): string {
-  return `color-mix(in srgb, ${primary} 24%, var(--md-sys-color-secondary-container))`;
+/** 容器色：随机旗色 24% 混进 M3 选中态容器色 */
+function buildPrideContainer(color: string): string {
+  return `color-mix(in srgb, ${color} 24%, var(--md-sys-color-secondary-container))`;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -307,25 +309,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
     /** 掷色时使用的旗帜 id（设置变更后旧色自动失效，无需 effect 清理） */
     accent: string | null;
     key: string;
-    /** 左侧旗条（全饱和硬边条纹） */
-    bar: string;
-    /** 容器色（旗首色混 secondary-container，随主题即时重算） */
+    /** 本次随机到的旗色（e2e / 调试：data-pride-color） */
+    raw: string;
+    /** 左上角斜向旗标（全饱和硬边条纹） */
+    band: string;
+    /** 容器色（随机旗色混 secondary-container，随主题即时重算） */
     container: string;
   } | null>(null);
 
-  /** 激活条目时套用当前旗帜的条纹背景（无随机，渲染确定） */
+  /** 上一次用过的旗色：新颜色不得与它相同（用户定案） */
+  const lastPrideRawRef = useRef<string | null>(null);
+  /** 上一次用过的旗帜：换旗后重置去重基准 */
+  const lastPrideFlagRef = useRef<string | null>(null);
+  /** 最近一次着色的条目 key：换旗时用它就地重掷（设置更改即时刷新） */
+  const lastPrideKeyRef = useRef<string | null>(null);
+
+  /** 激活条目时掷一次旗色（相邻两次不得同色） */
   const rollPride = useCallback((key: string) => {
     const flag = findPrideFlag(prideAccent);
     if (!flag || flag.stripes.length === 0) {
       setPridePick(null);
       return;
     }
+    // 随机取一色，但不得与上一次相同（换旗后重置基准）
+    const unique = [...new Set(flag.stripes)];
+    const last = lastPrideFlagRef.current === flag.id ? lastPrideRawRef.current : null;
+    const pool = unique.length > 1 ? unique.filter((c) => c !== last) : unique;
+    const raw = pool[Math.floor(Math.random() * pool.length)];
+    lastPrideRawRef.current = raw;
+    lastPrideFlagRef.current = flag.id;
+    lastPrideKeyRef.current = key;
     setPridePick({
       accent: flag.id,
       key,
-      bar: buildPrideBar(flag.stripes),
-      container: buildPrideContainer(flag.accent),
+      raw,
+      band: buildPrideBand(flag.stripes),
+      container: buildPrideContainer(raw),
     });
+  }, [prideAccent]);
+
+  // 换旗（设置更改）→ 就地给当前着色条目重掷一次，无需再点一次侧边栏。
+  // 这是"同步外部设置"的一次性纠偏，不是派生状态——项目规则禁止 effect 内
+  // 同步 setState，这里显式豁免。
+  useEffect(() => {
+    if (!lastPrideKeyRef.current || !prideAccent) return;
+    rollPride(lastPrideKeyRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在换旗时触发
   }, [prideAccent]);
 
   /** 导航并掷色（所有"位置类"条目共用） */
@@ -339,16 +368,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     key: string,
     active: boolean,
     dragOver: boolean,
-  ): { style?: React.CSSProperties; "data-pride-flag"?: string } => {
+  ): { style?: React.CSSProperties; "data-pride-flag"?: string; "data-pride-color"?: string } => {
     if (!pridePick || pridePick.accent !== prideAccent || !active || dragOver || pridePick.key !== key) return {};
     return {
       // 两个自定义属性分别驱动容器色与左侧旗条（见 Sidebar.css）——不写死
       // rgb，主题（明暗/种子色）变化时由 CSS 重新求值
       style: {
         "--pride-container": pridePick.container,
-        "--pride-bar": pridePick.bar,
+        "--pride-band": pridePick.band,
       } as React.CSSProperties,
       "data-pride-flag": pridePick.accent ?? undefined,
+      "data-pride-color": pridePick.raw,
     };
   };
 

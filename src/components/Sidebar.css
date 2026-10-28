@@ -481,25 +481,27 @@
 .sidebar-pin-section {
     margin-top: 4px;
 }
-/* ── 骄傲主题（v3.0.1020 方案 A+C）：容器色 + 左侧旗条 ──
- * 容器色 = 旗首色混 M3 选中态容器色（--pride-container，inline）；
- * 旗条 = 左侧悬浮的 4px 圆角竖条，全饱和硬边条纹（--pride-bar，inline）
- * —— 不用贴边方案：28px 胶囊圆角会把贴边色条裁成一个几乎看不见的月牙。
- * 两者都由 CSS 变量求值 → 明暗主题切换即时刷新。收起态不显示旗条。 */
+/* ── 骄傲主题（v3.0.1021）：随机容器色 + 左上角斜向旗标 ──
+ * 容器色 = 每次激活随机取一旗色（--pride-container，inline，24% 混
+ * secondary-container）；旗标 = 左上角 18px 方块旋转 45°，内部全饱和
+ * 硬边条纹（--pride-band，inline）。两者都由 CSS 变量求值 → 明暗主题
+ * 切换即时刷新。收起态不显示旗标，只保留容器色。 */
 .sidebar-item[data-pride-flag] {
     position: relative;
+    overflow: hidden;
     background-color: var(--pride-container);
 }
 
-.sidebar-item[data-pride-flag]::after {
+.sidebar-item[data-pride-flag]::before {
     content: '';
     position: absolute;
-    left: 6px;
-    top: 8px;
-    bottom: 8px;
-    width: 4px;
-    border-radius: 2px;
-    background: var(--pride-bar);
+    left: 4px;
+    top: 4px;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    transform: rotate(45deg);
+    background: var(--pride-band);
     pointer-events: none;
     z-index: 0;
 }
@@ -509,7 +511,7 @@
     z-index: 1;
 }
 
-/* 收起态（图标轨道）：不显示旗条，保留容器色 */
-.sidebar--collapsed .sidebar-item[data-pride-flag]::after {
+/* 收起态（图标轨道）：不显示旗标，保留容器色 */
+.sidebar--collapsed .sidebar-item[data-pride-flag]::before {
     display: none;
 }
