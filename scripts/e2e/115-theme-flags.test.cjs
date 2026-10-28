@@ -34,12 +34,15 @@ const h = require('./harness.cjs');
       const marked = [...document.querySelectorAll('[data-pride-color]')];
       const active = document.querySelector('.sidebar-item.active');
       const cs = active ? getComputedStyle(active) : null;
+      const before = active ? getComputedStyle(active, '::before') : null;
       return {
         count: marked.length,
         raw: active?.dataset.prideColor ?? null,
         icon: active?.querySelector('md-icon')?.textContent ?? null,
         bg: cs ? cs.backgroundColor : null,
         fg: cs ? cs.color : null,
+        gradient: before ? before.backgroundImage : null,
+        surface: getComputedStyle(document.documentElement).getPropertyValue('--md-sys-color-surface').trim(),
       };
     })()`)).value;
 
@@ -69,8 +72,22 @@ const h = require('./harness.cjs');
     h.assert.strictEqual(s1.icon, 'image', '应切到图片位置');
     h.assert.strictEqual(s1.count, 1, '只应有当前条目带骄傲底色');
     h.assert.ok(['#5BCEFA', '#F5A9B8', '#FFFFFF'].includes(s1.raw), `旗色应取自跨性别色库（实际 ${s1.raw}）`);
-    h.assert.ok(/^rgb\(/.test(s1.bg ?? ''), '底色应为弱化混色后的 rgb()');
-    h.assert.ok(['rgb(0, 0, 0)', 'rgb(255, 255, 255)'].includes(s1.fg), `文字应为黑或白（实际 ${s1.fg}）`);
+    // 整面旗条纹：跨性别 5 条 → ::before 渐变里应有 5 个色标
+    h.assert.ok(/linear-gradient/.test(s1.gradient ?? ''), '条目应有整面旗渐变背景');
+    h.assert.ok(((s1.gradient ?? '').match(/color\(/g) ?? []).length >= 5,
+      `跨性别旗应有 5 条色带（实际 ${(s1.gradient ?? '').match(/color\(/g)?.length ?? 0}）`);
+
+    // ── 2b) 切换明暗主题 → 骄傲底色必须立刻跟着刷新（不再内联死色） ──
+    await h.js(win, `window.electron.setThemeSource('light'); true`);
+    await h.sleep(900);
+    const sLight = await prideState();
+    h.assert.ok(sLight.surface !== s1.surface, '切换亮色后主题 surface 应变化');
+    h.assert.ok(sLight.gradient !== s1.gradient, '切换亮色后骄傲底纹应重算（不能沿用暗色值）');
+    h.assert.ok(sLight.fg !== s1.fg, '文字色应随主题更新');
+    await h.js(win, `window.electron.setThemeSource('dark'); true`);
+    await h.sleep(900);
+    const sBack = await prideState();
+    h.assert.ok(sBack.gradient !== sLight.gradient, '切回暗色后骄傲底纹应再次重算');
 
     // ── 3) 重复点同一位置 → 颜色必须变化（用户定案：非真随机，不与上一次相同） ──
     await h.clickPlace(win, 'image');

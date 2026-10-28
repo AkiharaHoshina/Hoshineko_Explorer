@@ -235,44 +235,19 @@ function findDeviceByPath(list: AllDevice[], devicePath: string): AllDevice | nu
   return null;
 }
 
-/** #RRGGBB / rgb(r, g, b) → [r, g, b] */
-function parseColorValue(input: string): [number, number, number] | null {
-  const hex = input.trim().match(/^#([0-9a-fA-F]{6})$/);
-  if (hex) {
-    const n = parseInt(hex[1], 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  }
-  const rgb = input.match(/rgba?\(([^)]+)\)/);
-  if (rgb) {
-    const parts = rgb[1].split(/[,\s/]+/).map(Number).filter((v) => !Number.isNaN(v));
-    if (parts.length >= 3) return [parts[0], parts[1], parts[2]];
-  }
-  return null;
-}
-
-/** 旗色按 alpha 混入背景色（明暗主题自适应弱化） */
-function mixColor(raw: string, base: string, alpha: number): string | null {
-  const a = parseColorValue(raw);
-  const b = parseColorValue(base);
-  if (!a || !b) return null;
-  const ch = (i: number): number => Math.round(a[i] * alpha + b[i] * (1 - alpha));
-  return `rgb(${ch(0)}, ${ch(1)}, ${ch(2)})`;
-}
-
-/** WCAG 相对亮度（0 = 黑，1 = 白） */
-function relativeLuminance(rgb: [number, number, number]): number {
-  const [r, g, b] = rgb.map((v) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+/**
+ * 旗帜条纹 → "整面旗"渐变（v3.0.1018）。
+ *
+ * 每条带按低比例 `color-mix` 混进 `surface-container`：多色同时出现，
+ * 一眼能认出旗帜；混色的另一端是 CSS 变量，**明暗主题切换会即时重算**
+ * （不再像旧实现那样把 rgb 内联死在元素上）。随机选中的那条提高比例做强调。
+ */
+function buildPrideGradient(stripes: string[], emphasis: string): string {
+  const stops = stripes.map((c) => {
+    const pct = c === emphasis ? 32 : 16;
+    return `color-mix(in srgb, ${c} ${pct}%, var(--md-sys-color-surface-container))`;
   });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-/** 按背景亮度选黑/白文字（弱化后的底色保证文字可读） */
-function readableTextOn(bg: string): string {
-  const rgb = parseColorValue(bg);
-  if (!rgb) return "var(--md-sys-color-on-surface)";
-  return relativeLuminance(rgb) > 0.5 ? "#000000" : "#FFFFFF";
+  return `linear-gradient(160deg, ${stops.join(', ')})`;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -327,9 +302,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     /** 掷色时使用的旗帜 id（设置变更后旧色自动失效，无需 effect 清理） */
     accent: string | null;
     key: string;
+    /** 随机强调的旗色（e2e/调试用：data-pride-color） */
     raw: string;
-    bg: string;
-    fg: string;
+    /** 整面旗渐变（CSS，随主题即时重算） */
+    gradient: string;
   } | null>(null);
   /** 上一次用过的旗色：新颜色不得与它相同（用户定案） */
   const lastPrideRawRef = useRef<string | null>(null);
@@ -339,21 +315,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   /** 激活条目时掷一次旗色（同一条目连续点击也不会连出同色） */
   const rollPride = useCallback((key: string) => {
     const flag = findPrideFlag(prideAccent);
-    if (!flag || flag.colors.length === 0) {
+    if (!flag || flag.stripes.length === 0) {
       setPridePick(null);
       return;
     }
     // 不要真随机：新颜色必须与**上一次**用的不同（跨条目/重复点同一条目都算）；
     // 换了一面旗则不延续上一面的去重基准
+    const unique = [...new Set(flag.stripes)];
     const last = lastPrideFlagRef.current === flag.id ? lastPrideRawRef.current : null;
-    const pool = flag.colors.length > 1 ? flag.colors.filter((c) => c !== last) : flag.colors;
+    const pool = unique.length > 1 ? unique.filter((c) => c !== last) : unique;
     const raw = pool[Math.floor(Math.random() * pool.length)];
     lastPrideRawRef.current = raw;
     lastPrideFlagRef.current = flag.id;
-    const surface = getComputedStyle(document.documentElement)
-      .getPropertyValue("--md-sys-color-surface").trim();
-    const bg = mixColor(raw, surface || "#1b1b1f", 0.26) ?? raw;
-    setPridePick({ accent: flag.id, key, raw, bg, fg: readableTextOn(bg) });
+    setPridePick({ accent: flag.id, key, raw, gradient: buildPrideGradient(flag.stripes, raw) });
   }, [prideAccent]);
 
   /** 导航并掷色（所有"位置类"条目共用） */
@@ -370,7 +344,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ): { style?: React.CSSProperties; "data-pride-color"?: string } => {
     if (!pridePick || pridePick.accent !== prideAccent || !active || dragOver || pridePick.key !== key) return {};
     return {
-      style: { backgroundColor: pridePick.bg, color: pridePick.fg },
+      // 自定义属性驱动 ::before 的整面旗渐变（见 Sidebar.css）——不写死 rgb，
+      // 主题（明暗/种子色）变化时由 CSS 重新求值
+      style: { "--pride-gradient": pridePick.gradient } as React.CSSProperties,
       "data-pride-color": pridePick.raw,
     };
   };
