@@ -495,12 +495,14 @@
 .sidebar-item[data-pride-flag]::before {
     content: '';
     position: absolute;
-    left: 4px;
-    top: 4px;
-    width: 22px;
+    /* 斜向旗条：从左上角出发，沿 45° 向右下延伸到胶囊边界（由父级
+       overflow hidden + 圆角裁切），不再是一个小方块 */
+    left: 0;
+    top: 0;
+    width: 96px;
     height: 22px;
-    border-radius: 4px;
-    transform: rotate(45deg);
+    transform-origin: 0 0;
+    transform: rotate(45deg) translateY(-50%);
     background: var(--pride-band);
     pointer-events: none;
     z-index: 0;

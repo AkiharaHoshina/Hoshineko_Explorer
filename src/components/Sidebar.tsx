@@ -249,6 +249,7 @@ function buildPrideBand(stripes: string[]): string {
   const seg = 100 / stripes.length;
   const stops: string[] = [];
   stripes.forEach((c, i) => stops.push(`${c} ${i * seg}%`, `${c} ${(i + 1) * seg}%`));
+  // 色带垂直于旗标长轴（旗标旋转 45° 后，每条旗色都平行于斜向延伸方向）
   return `linear-gradient(to bottom, ${stops.join(', ')})`;
 }
 

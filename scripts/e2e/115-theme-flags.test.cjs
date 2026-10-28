@@ -1,5 +1,5 @@
 /**
- * e2e 115：骄傲主题（v3.0.1021）。
+ * e2e 115：骄傲主题（v3.0.1022）。
  *
  * - 主题内容并入 settings://display（旧 settings://display/theme 归一）；
  * - 预设色盘不含旗帜；
