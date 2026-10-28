@@ -1,5 +1,21 @@
 # 更新日志
 
+## v3.0.1031 — 浅色模式骄傲按钮底色加深一级
+
+- 版本号升至 `3.0.1031`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1031.AppImage` / `HoshinekoFM-3.0.1031-size.AppImage`。
+- **浅色模式对比度修复**：骄傲容器色此前固定 24% 旗色混 `secondary-container`，
+  浅色模式下与页面背景（`surface`）过近。现在混色基底改为 CSS 变量
+  `--pride-mix-base`：深色模式仍是 `secondary-container`（视觉不变），浅色模式下
+  改用 `color-mix(in srgb, on-secondary-container 14%, secondary-container)`
+  （加深一级）。
+- `buildPrideContainer` 不再写死主题色——混色基底由 CSS 按
+  `prefers-color-scheme` 求值，遮罩底色与描边（都从 `--pride-container` 派生）
+  自动跟随；切主题即时重算。
+- e2e 115 增补：深色基底不含 `color-mix`（直取 `secondary-container`）、
+  浅色基底为加深混色且与深色不同；顺手把悬停判定改成「先移开再移回」的
+  重试写法（指针停在原地时 `sendInputEvent` 不产生 hover，曾偶发失败）。
+
 ## v3.0.1030 — 撤回骄傲遮罩/旗条上移
 
 - 版本号升至 `3.0.1030`；AppImage 产物名变为

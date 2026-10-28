@@ -1,5 +1,5 @@
 /**
- * e2e 115：骄傲主题（v3.0.1030）。
+ * e2e 115：骄傲主题（v3.0.1031）。
  *
  * - 主题内容并入 settings://display（旧 settings://display/theme 归一）；
  * - 预设色盘不含旗帜；
@@ -48,6 +48,7 @@ const h = require('./harness.cjs');
         bandDisplay: band ? band.display : null,
         disc: disc ? disc.backgroundColor : null,
         discTop: disc ? disc.top : null,
+        mixBase: cs ? cs.getPropertyValue('--pride-mix-base') : null,
         discDisplay: disc ? disc.display : null,
         discZ: disc ? disc.zIndex : null,
         discBorderW: disc ? disc.borderTopWidth : null,
@@ -99,6 +100,7 @@ const h = require('./harness.cjs');
     h.assert.ok(/linear-gradient/.test(s1.band ?? ''), '左上角应有旗标渐变');
     h.assert.ok(stopCount(s1.band) >= 10, `旗标应渲染 5 条硬边色带（色标 ${stopCount(s1.band)}）`);
     h.assert.ok(/^(rgb|color)\(/.test(s1.bg ?? ''), `容器色应为混色结果（实际 ${s1.bg}）`);
+    h.assert.ok(!/color-mix/.test(s1.mixBase ?? ''), `深色模式混色基底应直接取 secondary-container（实际 ${s1.mixBase}）`);
     // 图标圆形遮罩：位于旗标之上、图标之下，颜色 = 容器色加深一级
     h.assert.notStrictEqual(s1.discDisplay, 'none', '图标下应有圆形遮罩');
     h.assert.strictEqual(s1.discZ, '1', '遮罩层级应在旗标(0)与图标(2)之间');
@@ -117,9 +119,18 @@ const h = require('./harness.cjs');
 
     // ── 3b) 悬停不改变遮罩底色（遮罩只有一种状态） ──
     const rect = (await h.js(win, `(() => { const el = document.querySelector('.sidebar-item.active'); const r = el.getBoundingClientRect(); return {x:r.x, y:r.y, w:r.width, h:r.height}; })()`)).value;
-    win.webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(rect.x + rect.w / 2), y: Math.round(rect.y + rect.h / 2) });
-    await h.sleep(500);
-    const hovered = (await h.js(win, `document.querySelector('.sidebar-item.active')?.matches(':hover') ?? false`)).value;
+    win.focus();
+    const hx = Math.round(rect.x + rect.w / 2);
+    const hy = Math.round(rect.y + rect.h / 2);
+    // 指针可能已停在同一坐标（上一步点击），先制造一次位移再移回，确保产生 hover
+    let hovered = false;
+    for (let i = 0; i < 4 && !hovered; i += 1) {
+      win.webContents.sendInputEvent({ type: 'mouseMove', x: hx + (i % 2 ? 3 : -3), y: hy + (i % 2 ? 3 : -3) });
+      await h.sleep(200);
+      win.webContents.sendInputEvent({ type: 'mouseMove', x: hx, y: hy });
+      await h.sleep(250);
+      hovered = (await h.js(win, `document.querySelector('.sidebar-item.active')?.matches(':hover') ?? false`)).value;
+    }
     const sHover = await prideState();
     h.assert.ok(hovered, '鼠标应已悬停在激活条目上');
     h.assert.strictEqual(sHover.disc, s1b.disc, '悬停不应改变遮罩底色');
@@ -171,6 +182,8 @@ const h = require('./harness.cjs');
     const sLight = await prideState();
     h.assert.ok(sLight.surface !== afterSwitch.surface, '切换亮色后主题 surface 应变化');
     h.assert.ok(sLight.bg !== afterSwitch.bg, '切换亮色后容器色应重算');
+    h.assert.ok(/color-mix/.test(sLight.mixBase ?? ''), `浅色模式混色基底应加深一级（实际 ${sLight.mixBase}）`);
+    h.assert.notStrictEqual(sLight.mixBase, afterSwitch.mixBase, '明暗模式的混色基底应不同');
     h.assert.ok(sLight.fg !== afterSwitch.fg, '文字色应随主题更新');
     h.assert.strictEqual(sLight.band, afterSwitch.band, '旗标是旗色本色，不应随主题变化');
     h.assert.ok(/^(rgb|color)\(/.test(sLight.discBorderC ?? '') && !/0, 0, 0, 0/.test(sLight.discBorderC ?? ''),

@@ -493,7 +493,16 @@
 .sidebar-item[data-pride-flag] {
     position: relative;
     overflow: hidden;
+    /* 混色基底：深色模式直接用 M3 选中态容器色；浅色模式下它与页面背景
+       对比过低，改用 on-secondary-container 加深一级（用户定案） */
+    --pride-mix-base: var(--md-sys-color-secondary-container);
     background-color: var(--pride-container);
+}
+
+@media (prefers-color-scheme: light) {
+    .sidebar-item[data-pride-flag] {
+        --pride-mix-base: color-mix(in srgb, var(--md-sys-color-on-secondary-container) 14%, var(--md-sys-color-secondary-container));
+    }
 }
 
 .sidebar-item[data-pride-flag]::before {

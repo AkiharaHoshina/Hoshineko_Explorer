@@ -253,9 +253,14 @@ function buildPrideBand(stripes: string[]): string {
   return `linear-gradient(to bottom, ${stops.join(', ')})`;
 }
 
-/** 容器色：随机旗色 24% 混进 M3 选中态容器色 */
+/**
+ * 容器色：随机旗色 24% 混进 M3 选中态容器色。
+ * 混色基底用 CSS 变量 `--pride-mix-base`（见 Sidebar.css）——浅色模式下
+ * `secondary-container` 与页面背景对比过低，CSS 里换用加深一级的基底；
+ * 深色模式保持 `secondary-container` 不变。
+ */
 function buildPrideContainer(color: string): string {
-  return `color-mix(in srgb, ${color} 24%, var(--md-sys-color-secondary-container))`;
+  return `color-mix(in srgb, ${color} 24%, var(--pride-mix-base))`;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
