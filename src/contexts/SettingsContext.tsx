@@ -61,6 +61,13 @@ export interface SettingsContextValue {
   setDragFileAction: (v: DragFileAction) => void;
   showHiddenFiles: boolean;
   setShowHiddenFiles: (v: boolean) => void;
+  /**
+   * 骄傲主题（v3.0.1016）：左侧栏每次激活条目时从该旗帜色库随机取一色做
+   * 弱化底色。`null` = 无（默认）。只影响侧边栏当前条目，其余按主题渲染；
+   * 颜色本身仅在会话内有效。
+   */
+  prideAccent: string | null;
+  setPrideAccent: (v: string | null) => void;
   newTabPath: string;
   setNewTabPath: (v: string) => void;
   // ── 文件：文件预览 ──

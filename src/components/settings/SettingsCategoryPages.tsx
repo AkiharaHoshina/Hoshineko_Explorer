@@ -10,7 +10,8 @@ import { SettingsPreview } from '../SettingsPreview';
 import { t, getLanguageOptions, type Locale } from '../../i18n';
 import { ICON_SIZE_MIN, ICON_SIZE_MAX, ICON_SIZE_STEP } from '../../utils/iconZoom';
 import { formatNewTabPath } from '../../utils/newTabPath';
-import { THEME_FLAGS, THEME_PRESETS, type ThemeConfig } from '../../types/theme';
+import { THEME_PRESETS, type ThemeConfig } from '../../types/theme';
+import { PRIDE_FLAGS } from '../../types/pride';
 import { showToast } from '../../utils/toast';
 import { useSettings } from '../../contexts/SettingsContext';
 import { SettingsSection, SettingsRow, SettingsSelectRow, SettingsSwitchRow, ThreeStateSwitchRow } from './SettingsShared';
@@ -437,13 +438,6 @@ const UiScaleRow: React.FC = () => {
   );
 };
 
-/** 旗帜色条 → CSS 渐变（等分横向条纹，从上到下） */
-const flagStripes = (stripes: string[]): string => {
-  const step = 100 / stripes.length;
-  const stops = stripes.map((c, i) => `${c} ${i * step}% ${(i + 1) * step}%`);
-  return `linear-gradient(to bottom, ${stops.join(', ')})`;
-};
-
 // ── 主题（并入 settings://display，v3.0.1015） ──
 
 export const ThemeSettings: React.FC = () => {
@@ -526,11 +520,6 @@ export const ThemeSettings: React.FC = () => {
     s.setThemeConfig({ kind: 'matugen' });
   }, [s.setThemeConfig]); // eslint-disable-line react-hooks/exhaustive-deps -- setThemeConfig 为稳定 setter
 
-  /** 选择旗帜主题（Pride 系列：多色，三强调角色各取一色） */
-  const selectFlag = useCallback((presetId: string) => {
-    s.setThemeConfig({ kind: 'flag', presetId, contrast: 0 });
-  }, [s.setThemeConfig]); // eslint-disable-line react-hooks/exhaustive-deps -- setThemeConfig 为稳定 setter
-
   const handlePickerClose = useCallback((color: string | null) => {
     setPickerOpen(false);
     if (!color) return;
@@ -566,19 +555,6 @@ export const ThemeSettings: React.FC = () => {
               className={`theme-color-preset${s.themeConfig?.kind === 'preset' && s.themeConfig.presetId === p.id ? ' theme-color-preset--selected' : ''}`}
               style={{ backgroundColor: p.seed }}
               onClick={() => selectPreset(p.seed, p.id)}
-            />
-          ))}
-          {/* 旗帜主题：多色——卡片用横向条纹完整展示旗帜，主题本身取其中
-              三色作 M3 强调色（见 types/theme.ts 的 THEME_FLAGS 说明） */}
-          {THEME_FLAGS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              title={t(`theme.flag.${f.id}`)}
-              aria-label={t(`theme.flag.${f.id}`)}
-              className={`theme-color-preset theme-color-preset--flag${s.themeConfig?.kind === 'flag' && s.themeConfig.presetId === f.id ? ' theme-color-preset--selected' : ''}`}
-              style={{ background: flagStripes(f.stripes) }}
-              onClick={() => selectFlag(f.id)}
             />
           ))}
         </div>
@@ -632,6 +608,23 @@ export const ThemeSettings: React.FC = () => {
             <span className="theme-color-special-desc">{t('theme.custom_desc')}</span>
           </button>
         </div>
+      </div>
+
+      {/* 骄傲主题（v3.0.1016）：只影响左侧栏当前激活条目的底色，其余按主题渲染 */}
+      <div className="theme-color-section">
+        <div className="theme-color-section-header">{t('settings.pride_theme')}</div>
+        <SettingsSelectRow
+          icon="flag"
+          label={t('settings.pride_theme')}
+          sub={t('settings.pride_theme_desc')}
+          rowId="display-pride-theme"
+          value={s.prideAccent ?? ''}
+          onChange={(v) => s.setPrideAccent(v ? v : null)}
+          options={[
+            { value: '', label: t('pride.none') },
+            ...PRIDE_FLAGS.map((f) => ({ value: f.id, label: t(`pride.flag.${f.id}`) })),
+          ]}
+        />
       </div>
 
       <ColorPickerDialog

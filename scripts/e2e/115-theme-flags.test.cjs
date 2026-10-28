@@ -1,75 +1,107 @@
 /**
- * e2e 115：主题改版（v3.0.1015）。
+ * e2e 115：主题改版（v3.0.1016）。
  *
  * - 主题内容并入 settings://display（旧 settings://display/theme 归一）；
- * - 预设新增两面旗帜（跨性别 / 骄傲），点击应用并持久化 kind='flag'；
- * - 特殊颜色为 4 张大卡片，系统主题已移除。
+ * - 预设色盘不再含旗帜（旧整页 flag 主题已推翻）；
+ * - 「骄傲主题」设置项：选择旗帜后，每次激活左侧栏条目都给**当前条目**
+ *   随机套一个旗色（弱化混色 + 黑/白文字自适应）；切走复原；收起态同样生效；
+ *   选「无」时不着色。
  */
 const h = require('./harness.cjs');
 
 (async () => {
   await h.setupApp();
 
-  await h.run('115 主题：旗帜预设 + 特殊颜色 4 卡 + 旧子页归一', async () => {
+  await h.run('115 骄傲主题：侧边栏随机旗色 + 旧子页归一', async () => {
     const dir = h.tempDir();
     h.makeFileTree(dir, { 'a.txt': 'x' });
     const win = await h.createTestWindow({ argv: ['electron', dir] });
     await h.waitFor(win, `!!document.querySelector('.file-list-item')`);
     await h.sleep(400);
 
+    /** 写设置（useLocalStorage 以 JSON 存储：字符串值需双层 stringify） */
+    const setPride = async (flagId) => {
+      await h.js(
+        win,
+        `localStorage.setItem('settings.prideAccent', ${JSON.stringify(JSON.stringify(flagId))}); location.reload(); true`,
+      );
+      await h.waitFor(win, `!!document.querySelector('.file-list-item')`, { timeout: 8000 });
+      await h.sleep(400);
+    };
+
+    /** 当前带骄傲底色的条目信息 */
+    const prideState = async () => (await h.js(win, `(() => {
+      const marked = [...document.querySelectorAll('[data-pride-color]')];
+      const active = document.querySelector('.sidebar-item.active');
+      const cs = active ? getComputedStyle(active) : null;
+      return {
+        count: marked.length,
+        raw: active?.dataset.prideColor ?? null,
+        icon: active?.querySelector('md-icon')?.textContent ?? null,
+        bg: cs ? cs.backgroundColor : null,
+        fg: cs ? cs.color : null,
+      };
+    })()`)).value;
+
+    // ── 1) 设置页：旗帜不再是预设；骄傲主题行存在且选项齐全 ──
+    await setPride('transgender');
     await h.openSettingsPage(win, /主题和显示|Theme & Display/);
-    await h.waitFor(win, `!!document.querySelector('.theme-color-preset--flag')`, { timeout: 8000 });
+    await h.waitFor(win, `!!document.querySelector('[data-settings-row="display-pride-theme"]')`, { timeout: 8000 });
+    const ui = (await h.js(win, `(() => {
+      const row = document.querySelector('[data-settings-row="display-pride-theme"]');
+      const sel = row?.querySelector('md-outlined-select');
+      return {
+        flags: document.querySelectorAll('.theme-color-preset--flag').length,
+        options: sel ? [...sel.querySelectorAll('md-select-option')].map((o) => o.value) : [],
+        value: sel ? sel.value : null,
+      };
+    })()`)).value;
+    h.assert.strictEqual(ui.flags, 0, '预设色盘不应再有旗帜');
+    h.assert.ok(ui.options.includes('') && ui.options.includes('transgender') && ui.options.includes('pride'),
+      `骄傲主题下拉应含 无/跨性别/骄傲（实际 ${JSON.stringify(ui.options.slice(0, 4))}…）`);
+    h.assert.ok(ui.options.length >= 10, `骄傲主题应有多种旗帜可选（实际 ${ui.options.length}）`);
+    h.assert.strictEqual(ui.value, 'transgender', '下拉应反映当前设置');
 
-    const themeCss = async () => (await h.js(
-      win,
-      `document.getElementById('app-theme')?.textContent ?? ''`,
-    )).value;
-    const storedConfig = async () => (await h.js(
-      win,
-      `(() => { try { return JSON.parse(localStorage.getItem('settings.theme') ?? 'null'); } catch { return null; } })()`,
-    )).value;
+    // ── 2) 点击位置 → 当前条目带旗色，且只有它一个 ──
+    await h.clickPlace(win, 'image');
+    await h.sleep(500);
+    const s1 = await prideState();
+    h.assert.strictEqual(s1.icon, 'image', '应切到图片位置');
+    h.assert.strictEqual(s1.count, 1, '只应有当前条目带骄傲底色');
+    h.assert.ok(['#5BCEFA', '#F5A9B8', '#FFFFFF'].includes(s1.raw), `旗色应取自跨性别色库（实际 ${s1.raw}）`);
+    h.assert.ok(/^rgb\(/.test(s1.bg ?? ''), '底色应为弱化混色后的 rgb()');
+    h.assert.ok(['rgb(0, 0, 0)', 'rgb(255, 255, 255)'].includes(s1.fg), `文字应为黑或白（实际 ${s1.fg}）`);
 
-    // 1) 单色预设 12 + 旗帜 2
-    const counts = (await h.js(win, `({
-      seeds: document.querySelectorAll('.theme-color-preset:not(.theme-color-preset--flag)').length,
-      flags: document.querySelectorAll('.theme-color-preset--flag').length,
-      specials: document.querySelectorAll('.theme-color-special').length,
-    })`)).value;
-    h.assert.strictEqual(counts.seeds, 12, '单色预设应为 12 个');
-    h.assert.strictEqual(counts.flags, 2, '旗帜预设应为 2 个（跨性别 / 骄傲）');
-    h.assert.strictEqual(counts.specials, 4, '特殊颜色应为 4 张大卡片');
+    // ── 3) 切到另一位置 → 旧条目复原，新条目带色 ──
+    await h.clickPlace(win, 'description');
+    await h.sleep(500);
+    const s2 = await prideState();
+    h.assert.strictEqual(s2.icon, 'description', '应切到文档位置');
+    h.assert.strictEqual(s2.count, 1, '切走后旧条目不应保留颜色');
+    h.assert.ok(s2.raw !== null, '新激活条目应带骄傲底色');
 
-    // 2) 系统主题已移除（不再有该卡片/文案）
-    const hasSystem = (await h.js(
-      win,
-      `[...document.querySelectorAll('.theme-color-special-title')].some((el) => /系统主题|System theme/.test(el.textContent ?? ''))`,
-    )).value;
-    h.assert.strictEqual(hasSystem, false, '系统主题卡片应已移除');
-
-    const before = await themeCss();
-
-    // 3) 跨性别旗 → kind='flag'
-    await h.js(win, `document.querySelectorAll('.theme-color-preset--flag')[0].click(); true`);
-    await h.sleep(600);
-    const cfgTg = await storedConfig();
-    h.assert.strictEqual(cfgTg?.kind, 'flag', '选择旗帜后应持久化 kind=flag');
-    h.assert.strictEqual(cfgTg?.presetId, 'transgender', '第一面旗帜应为跨性别');
-    const cssTg = await themeCss();
-    h.assert.ok(cssTg.length > 0 && cssTg !== before, '应注入旗帜主题 CSS');
-    h.assert.ok(cssTg.includes('--md-sys-color-primary'), '主题 CSS 应包含 M3 角色变量');
-
-    // 4) 骄傲旗 → presetId 切换且配色不同
-    await h.js(win, `document.querySelectorAll('.theme-color-preset--flag')[1].click(); true`);
-    await h.sleep(600);
-    const cfgPride = await storedConfig();
-    h.assert.strictEqual(cfgPride?.presetId, 'pride', '第二面旗帜应为骄傲');
-    const cssPride = await themeCss();
-    h.assert.ok(cssPride !== cssTg, '两面旗帜应生成不同配色');
-
-    // 5) 旧子页链接归一（settings://display/theme → settings://display）
-    await h.js(win, `location.reload(); true`);
-    await h.waitFor(win, `!!document.querySelector('.file-list-item')`, { timeout: 8000 });
+    // ── 4) 收起态（图标轨道）同样生效 ──
+    await h.clickEl(win, '.sidebar-collapse-btn');
     await h.sleep(400);
+    h.assert.ok(
+      (await h.js(win, `!!document.querySelector('.sidebar--collapsed')`)).value,
+      '侧边栏应已收起',
+    );
+    await h.clickPlace(win, 'image');
+    await h.sleep(500);
+    const s3 = await prideState();
+    h.assert.strictEqual(s3.icon, 'image', '收起态也应能切换位置');
+    h.assert.strictEqual(s3.count, 1, '收起态同样只应有当前条目带色');
+    h.assert.ok(['#5BCEFA', '#F5A9B8', '#FFFFFF'].includes(s3.raw), `收起态旗色应来自色库（实际 ${s3.raw}）`);
+
+    // ── 5) 设为「无」→ 不再着色 ──
+    await setPride(null);
+    await h.clickPlace(win, 'home');
+    await h.sleep(500);
+    const s4 = await prideState();
+    h.assert.strictEqual(s4.count, 0, '「无」时不应有任何骄傲底色');
+
+    // ── 6) 旧子页链接归一（settings://display/theme → settings://display） ──
     await h.clickEl(win, '.omnibar-trigger');
     await h.waitFor(win, `!!document.querySelector('.omnibar.mode-edit .omnibar-input')`);
     await h.setReactInput(win, '.omnibar.mode-edit .omnibar-input', 'settings://display/theme');

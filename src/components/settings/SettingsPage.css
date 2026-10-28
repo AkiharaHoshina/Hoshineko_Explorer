@@ -385,16 +385,20 @@
 
 /* review 29.1：特殊颜色卡不填满界面——固定宽度与设置主页卡片一致
  * （180px），高度自然（换行小字两行）；flex-wrap 动态排列 */
-/* 特殊颜色：2×2 大卡片（v3.0.1015——原先是 3 张 180px 小卡 + 按钮行） */
+/* 特殊颜色：卡片尺寸与设置主页分类卡一致（v3.0.1016：
+ * auto-fill + minmax(180px) + 统一内边距/圆角，四张卡在任何宽度下同尺寸） */
 .theme-color-specials {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
+  padding: 12px 0;
 }
 
 .theme-color-specials .theme-color-special {
   width: auto;
-  min-height: 96px;
+  min-height: 112px;
+  padding: 16px;
+  border-radius: 16px;
   justify-content: flex-start;
 }
 

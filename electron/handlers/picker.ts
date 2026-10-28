@@ -99,7 +99,7 @@ export interface PickerSettings {
  */
 export interface PickerThemeSnapshot {
   config: {
-    kind: 'preset' | 'custom' | 'flag' | 'wallpaper' | 'matugen';
+    kind: 'preset' | 'custom' | 'wallpaper' | 'matugen';
     seed?: string;
     presetId?: string;
     wallpaperPath?: string;

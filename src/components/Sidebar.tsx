@@ -13,6 +13,7 @@ import type { ContextMenuItem } from "./ContextMenu";
 import { useDrag } from "../contexts/DragContext";
 import { shouldSuppressDrop } from "../utils/nativeDragTracker";
 import { setPinReorderDragActive } from "../utils/pinReorderDrag";
+import { findPrideFlag } from "../types/pride";
 import { registerKeyboardZone } from "../utils/focusZones";
 import { isObjectDrag, readObjectDrag, type ObjectDragPayload } from "../utils/objectDrag";
 import { useLocalStorage } from "../hooks/useLocalStorage";
@@ -134,6 +135,9 @@ interface SidebarProps {
    * 数值越大，翻一页所需累计滚动位移越小。
    */
   wheelSensitivity?: number;
+  /** 骄傲主题（旗帜 id；null = 无）：每次激活侧边栏条目时给当前条目
+   *  随机取一个旗色做弱化底色（会话内有效，切换条目后旧条目复原） */
+  prideAccent?: string | null;
 }
 
 /** 侧边栏拖放目标标识前缀与常量 */
@@ -231,6 +235,46 @@ function findDeviceByPath(list: AllDevice[], devicePath: string): AllDevice | nu
   return null;
 }
 
+/** #RRGGBB / rgb(r, g, b) → [r, g, b] */
+function parseColorValue(input: string): [number, number, number] | null {
+  const hex = input.trim().match(/^#([0-9a-fA-F]{6})$/);
+  if (hex) {
+    const n = parseInt(hex[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const rgb = input.match(/rgba?\(([^)]+)\)/);
+  if (rgb) {
+    const parts = rgb[1].split(/[,\s/]+/).map(Number).filter((v) => !Number.isNaN(v));
+    if (parts.length >= 3) return [parts[0], parts[1], parts[2]];
+  }
+  return null;
+}
+
+/** 旗色按 alpha 混入背景色（明暗主题自适应弱化） */
+function mixColor(raw: string, base: string, alpha: number): string | null {
+  const a = parseColorValue(raw);
+  const b = parseColorValue(base);
+  if (!a || !b) return null;
+  const ch = (i: number): number => Math.round(a[i] * alpha + b[i] * (1 - alpha));
+  return `rgb(${ch(0)}, ${ch(1)}, ${ch(2)})`;
+}
+
+/** WCAG 相对亮度（0 = 黑，1 = 白） */
+function relativeLuminance(rgb: [number, number, number]): number {
+  const [r, g, b] = rgb.map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** 按背景亮度选黑/白文字（弱化后的底色保证文字可读） */
+function readableTextOn(bg: string): string {
+  const rgb = parseColorValue(bg);
+  if (!rgb) return "var(--md-sys-color-on-surface)";
+  return relativeLuminance(rgb) > 0.5 ? "#000000" : "#FFFFFF";
+}
+
 export const Sidebar: React.FC<SidebarProps> = ({
   currentPath,
   onNavigate,
@@ -260,6 +304,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   terminalOpen = false,
   onToggleTerminal,
   wheelSensitivity = 100,
+  prideAccent = null,
 }) => {
   const isPicker = variant === 'picker';
   const [places, setPlaces] = useState<
@@ -273,6 +318,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   /** 拖拽悬停中的侧边栏目标标识（place:/device:/gvfs:/pin: 前缀），无悬停为 null */
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+
+  /**
+   * 骄傲主题：当前被激活条目的随机旗色（**会话内**，不持久化）。
+   * 只对当前激活条目生效；切到别的条目后旧条目复原（用户定案）。
+   */
+  const [pridePick, setPridePick] = useState<{ key: string; raw: string; bg: string; fg: string } | null>(null);
+  // 设置项变化（换旗/关闭）时清掉旧色
+  useEffect(() => { setPridePick(null); }, [prideAccent]);
+
+  /** 激活条目时掷一次旗色（同一条目连续点击也不会连出同色） */
+  const rollPride = useCallback((key: string) => {
+    const flag = findPrideFlag(prideAccent);
+    if (!flag || flag.colors.length === 0) {
+      setPridePick(null);
+      return;
+    }
+    const pool = flag.colors;
+    let raw = pool[Math.floor(Math.random() * pool.length)];
+    if (pool.length > 1 && pridePick && pridePick.key === key && raw === pridePick.raw) {
+      const others = pool.filter((c) => c !== raw);
+      raw = others[Math.floor(Math.random() * others.length)] ?? raw;
+    }
+    const surface = getComputedStyle(document.documentElement)
+      .getPropertyValue("--md-sys-color-surface").trim();
+    const bg = mixColor(raw, surface || "#1b1b1f", 0.26) ?? raw;
+    setPridePick({ key, raw, bg, fg: readableTextOn(bg) });
+  }, [prideAccent, pridePick]);
+
+  /** 导航并掷色（所有"位置类"条目共用） */
+  const goWithPride = useCallback((path: string, key: string) => {
+    rollPride(key);
+    onNavigate(path);
+  }, [rollPride, onNavigate]);
+
+  /** 当前应挂到条目上的骄傲底色（仅在激活且未被拖拽悬停覆盖时） */
+  const prideAttrs = (
+    key: string,
+    active: boolean,
+    dragOver: boolean,
+  ): { style?: React.CSSProperties; "data-pride-color"?: string } => {
+    if (!pridePick || !active || dragOver || pridePick.key !== key) return {};
+    return {
+      style: { backgroundColor: pridePick.bg, color: pridePick.fg },
+      "data-pride-color": pridePick.raw,
+    };
+  };
 
   const { getDragState, endDrag } = useDrag();
 
@@ -1107,7 +1198,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={`sidebar-item ${active ? "active" : ""}`}
             tabIndex={-1}
             title={t("sidebar.dashboard")}
-            onClick={() => onNavigate("app://dashboard")}
+            onClick={() => goWithPride("app://dashboard", "fixed:dashboard")}
+            {...prideAttrs("fixed:dashboard", active, false)}
             onContextMenu={(e) => {
               if (!onPlaceContextMenu) return;
               e.preventDefault();
@@ -1143,7 +1235,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             data-sidebar-target={`${TARGET_PREFIX_PLACE}${place.path}`}
             tabIndex={-1}
             title={label}
-            onClick={() => onNavigate(place.path)}
+            onClick={() => goWithPride(place.path, `fixed:place:${place.path}`)}
+            {...prideAttrs(`fixed:place:${place.path}`, active, dragOverTarget === `${TARGET_PREFIX_PLACE}${place.path}`)}
             onContextMenu={(e) => {
               if (!onPlaceContextMenu) return;
               e.preventDefault();
@@ -1175,7 +1268,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={`sidebar-item ${active ? "active" : ""}`}
             tabIndex={-1}
             title={t("settings.title")}
-            onClick={() => onNavigate("settings://")}
+            onClick={() => goWithPride("settings://", "fixed:settings")}
+            {...prideAttrs("fixed:settings", active, false)}
           >
             <Icon name="settings" className="sidebar-icon" filled={active} />
             <span className="sidebar-label">
@@ -1197,7 +1291,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={`sidebar-item ${active ? "active" : ""}`}
             tabIndex={-1}
             title={t("objects.title")}
-            onClick={() => onNavigate("objects://")}
+            onClick={() => goWithPride("objects://", "fixed:objects")}
+            {...prideAttrs("fixed:objects", active, false)}
           >
             <Icon name="widgets" className="sidebar-icon" filled={active} />
             <span className="sidebar-label">
@@ -1224,7 +1319,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               data-sidebar-target={`${TARGET_PREFIX_PLACE}${place.path}`}
               tabIndex={-1}
               title={label}
-              onClick={() => onNavigate(place.path)}
+              onClick={() => goWithPride(place.path, `fixed:place:${place.path}`)}
+              {...prideAttrs(`fixed:place:${place.path}`, active, dragOverTarget === `${TARGET_PREFIX_PLACE}${place.path}`)}
               onContextMenu={(e) => {
                 if (!onPlaceContextMenu) return;
                 e.preventDefault();
@@ -1302,13 +1398,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 e.stopPropagation();
                 onPinnedContextMenu(e, item);
               }}
-              onClick={() => onNavigate(item.path)}
+              onClick={() => goWithPride(item.path, `pinned:${item.path}`)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  onNavigate(item.path);
+                  goWithPride(item.path, `pinned:${item.path}`);
                 }
               }}
+              {...prideAttrs(`pinned:${item.path}`, currentPath === item.path, dragOverTarget === `${TARGET_PREFIX_PLACE}${item.path}`)}
             >
               <Icon
                 name={item.icon ?? "folder"}
@@ -1413,7 +1510,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       key={part.name}
                       device={part}
                       isActive={!!(part.mounted && part.mountpoint && currentPath.startsWith(part.mountpoint))}
-                      onPartitionClick={handlePartitionClick}
+                      onPartitionClick={(dev) => {
+                        rollPride(`device-part:${dev.devicePath}`);
+                        void handlePartitionClick(dev);
+                      }}
+                      pride={prideAttrs(
+                        `device-part:${part.devicePath}`,
+                        !!(part.mounted && part.mountpoint && currentPath.startsWith(part.mountpoint)),
+                        dragOverTarget === `${TARGET_PREFIX_DEVICE}${part.devicePath}`,
+                      )}
                       onDeviceContextMenu={onDeviceContextMenu}
                       onDeviceMount={onDeviceMount}
                       onDeviceUnmount={onDeviceUnmount}
@@ -1428,7 +1533,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <SidebarPartitionItem
                   device={disk}
                   isActive={!!(disk.mounted && disk.mountpoint && currentPath.startsWith(disk.mountpoint))}
-                  onPartitionClick={handlePartitionClick}
+                  onPartitionClick={(dev) => {
+                    rollPride(`device-part:${dev.devicePath}`);
+                    void handlePartitionClick(dev);
+                  }}
+                  pride={prideAttrs(
+                    `device-part:${disk.devicePath}`,
+                    !!(disk.mounted && disk.mountpoint && currentPath.startsWith(disk.mountpoint)),
+                    dragOverTarget === `${TARGET_PREFIX_DEVICE}${disk.devicePath}`,
+                  )}
                   onDeviceContextMenu={onDeviceContextMenu}
                   onDeviceMount={onDeviceMount}
                   onDeviceUnmount={onDeviceUnmount}
@@ -1459,11 +1572,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               role="button"
               tabIndex={-1}
               title={volume.mountpoint ?? volume.deviceId ?? volume.name}
-              onClick={() => { void handleGvfsClick(volume); }}
+              onClick={() => { rollPride(`gvfs:${gvfsKey}`); void handleGvfsClick(volume); }}
+              {...prideAttrs(`gvfs:${gvfsKey}`, isActive, dragOverTarget === `${TARGET_PREFIX_GVFS}${gvfsKey}`)}
               onContextMenu={(e) => onGvfsContextMenu?.(e, volume)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
+                  rollPride(`gvfs:${gvfsKey}`);
                   void handleGvfsClick(volume);
                 }
               }}

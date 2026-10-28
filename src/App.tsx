@@ -772,6 +772,14 @@ function AppContent() {
     "settings.dragFileAction",
     "ask",
   );
+  /**
+   * 骄傲主题（设置 → 主题和显示）：选择旗帜 id，null = 无。
+   * 只决定侧边栏随机底色的色库，不影响主题颜色本身。
+   */
+  const [prideAccent, setPrideAccent] = useLocalStorage<string | null>(
+    "settings.prideAccent",
+    null,
+  );
   const [iconSize, setIconSize] = useLocalStorage<number>(
     "settings.iconSize",
     48,
@@ -1769,6 +1777,7 @@ function AppContent() {
     handleLocaleChange("auto");
     setShowHiddenFiles(true);
     setDragFileAction("ask");
+    setPrideAccent(null);
     setViewMode("list");
     setIconSize(48);
     setUiScale(100);
@@ -1801,6 +1810,7 @@ function AppContent() {
     handleLocaleChange,
     setShowHiddenFiles,
     setDragFileAction,
+    setPrideAccent,
     setViewMode,
     setIconSize,
     setUiScale,
@@ -2726,6 +2736,8 @@ function AppContent() {
         groupingEnabled,
         dragFileAction,
         setDragFileAction,
+        prideAccent,
+        setPrideAccent,
         showHiddenFiles,
         setShowHiddenFiles,
         newTabPath,
@@ -2826,6 +2838,7 @@ function AppContent() {
             terminalOpen={terminalOpen}
             onToggleTerminal={toggleTerminal}
             wheelSensitivity={sidebarWheelSensitivity}
+            prideAccent={prideAccent}
           />
 
           <main className="main-content">

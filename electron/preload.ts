@@ -42,7 +42,7 @@ contextBridge.exposeInMainWorld('electron', {
   /** 订阅主题快照变化（服务模式常驻进程广播；null = 快照被清/无主题，回落注入值/默认） */
   onPickerThemeChanged: (callback: (theme: {
     config: {
-      kind: 'preset' | 'custom' | 'flag' | 'wallpaper' | 'matugen';
+      kind: 'preset' | 'custom' | 'wallpaper' | 'matugen';
       seed?: string;
       presetId?: string;
       wallpaperPath?: string;

@@ -27,6 +27,9 @@ interface SidebarPartitionItemProps {
   /** Tab 序索引：主窗口键盘分区模式下传 -1（Tab 只做分区循环，
    *  分区内方向键移动）；选择器窗口保持默认 0 */
   tabIndex?: number;
+  /** 骄傲主题当前色（由侧边栏算好：style + data-pride-color），仅在
+   *  该分区为激活项时传入 */
+  pride?: { style?: React.CSSProperties; "data-pride-color"?: string };
 }
 
 export const SidebarPartitionItem: React.FC<SidebarPartitionItemProps> = ({
@@ -42,12 +45,14 @@ export const SidebarPartitionItem: React.FC<SidebarPartitionItemProps> = ({
   dropTarget,
   dragOver = false,
   tabIndex = 0,
+  pride,
 }) => {
   return (
     <div
       key={device.name}
       className={`sidebar-item sidebar-partition ${!device.mounted ? "unmounted" : ""} ${isActive ? "active" : ""} ${dragOver ? "drag-over" : ""}`}
       data-sidebar-target={dropTarget}
+      {...pride}
       role="button"
       tabIndex={tabIndex}
       onClick={() => onPartitionClick(device)}

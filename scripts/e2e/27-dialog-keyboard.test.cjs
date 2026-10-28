@@ -129,19 +129,20 @@ const h = require('./harness.cjs');
     await h.waitFor(win, `!!document.querySelector('.theme-color-preset-grid')`, { timeout: 8000 });
     const title = await h.js(win, `document.querySelector('.settings-page .object-panel-title')?.textContent ?? ''`);
     h.assert.ok(/主题和显示|Theme & Display|テーマと表示|테마 및 표시/.test(title.value), `应停留在显示分类页（实际 ${title.value}）`);
-    // 预设色盘（12 单色 + 2 旗帜）+ 4 张特殊颜色大卡片（无独立按钮行）
+    // 预设色盘 12 单色 + 4 张特殊颜色大卡片 + 骄傲主题行（v3.0.1016：旗帜
+    // 不再是预设，改为下方独立设置项）
     const themeBody = await h.js(win, `(() => {
       return {
-        seedPresets: document.querySelectorAll('.theme-color-preset:not(.theme-color-preset--flag)').length,
-        flagPresets: document.querySelectorAll('.theme-color-preset--flag').length,
+        seedPresets: document.querySelectorAll('.theme-color-preset').length,
         specials: document.querySelectorAll('.theme-color-special').length,
         paletteBtns: document.querySelectorAll('.theme-color-palette-row').length,
+        prideRow: document.querySelectorAll('[data-settings-row="display-pride-theme"]').length,
       };
     })()`);
     h.assert.strictEqual(themeBody.value.seedPresets, 12, '预设色盘应有 12 个单色');
-    h.assert.strictEqual(themeBody.value.flagPresets, 2, '应有跨性别/骄傲两面旗帜');
     h.assert.strictEqual(themeBody.value.specials, 4, '特殊颜色应有 4 张大卡片');
     h.assert.strictEqual(themeBody.value.paletteBtns, 0, '旧按钮行应已移除');
+    h.assert.strictEqual(themeBody.value.prideRow, 1, '应有骄傲主题设置行');
   });
 
   await h.run('27c 对话框键盘选择滚动量（最小滚动校正）', async () => {
