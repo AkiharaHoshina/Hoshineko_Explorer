@@ -467,12 +467,13 @@ export const ThemeSettings: React.FC = () => {
     s.setThemeConfig({ kind: 'preset', seed, presetId, scheme: 'scheme-tonal-spot', contrast: 0 });
   }, [s.setThemeConfig]); // eslint-disable-line react-hooks/exhaustive-deps -- setThemeConfig 为稳定 setter // eslint-disable-line react-hooks/exhaustive-deps -- setThemeConfig 为稳定 setter // eslint-disable-line react-hooks/exhaustive-deps -- setThemeConfig 为 useLocalStorage 稳定 setter
 
-  /** 壁纸取色：生成后立即保存 */
-  const applyWallpaper = useCallback(async (path: string) => {
+  /** 壁纸取色：生成后立即保存（source 区分「自动探测」与「手动选图」） */
+  const applyWallpaper = useCallback(async (path: string, source: 'auto' | 'pick') => {
     if (!window.electron?.genWallpaperTheme) return;
     const baseCfg: ThemeConfig = {
       kind: 'wallpaper',
       wallpaperPath: path,
+      wallpaperSource: source,
       scheme: dmsInfo.scheme ?? 'scheme-tonal-spot',
       contrast: dmsInfo.contrast ?? 0,
     };
@@ -502,7 +503,7 @@ export const ThemeSettings: React.FC = () => {
         showToast(t('theme.wallpaper_not_found'), 'info');
         return;
       }
-      await applyWallpaper(path);
+      await applyWallpaper(path, 'auto');
     } finally {
       setWallpaperBusy(false);
     }
@@ -513,7 +514,7 @@ export const ThemeSettings: React.FC = () => {
     const picked = await window.electron.openPicker({ mode: 'file' });
     const path = picked?.[0];
     if (!path) return;
-    await applyWallpaper(path);
+    await applyWallpaper(path, 'pick');
   }, [applyWallpaper, wallpaperBusy]);
 
   const importMatugen = useCallback(() => {
@@ -527,6 +528,10 @@ export const ThemeSettings: React.FC = () => {
   }, [s.setThemeConfig]); // eslint-disable-line react-hooks/exhaustive-deps -- setThemeConfig 为稳定 setter
 
   const selectedKind = s.themeConfig?.kind;
+  /** 壁纸来源（旧配置无该字段 → 视为自动探测） */
+  const wallpaperSource = s.themeConfig?.wallpaperSource ?? 'auto';
+  const isAutoWallpaper = selectedKind === 'wallpaper' && wallpaperSource === 'auto';
+  const isPickedWallpaper = selectedKind === 'wallpaper' && wallpaperSource === 'pick';
 
   return (
     <>
@@ -566,7 +571,8 @@ export const ThemeSettings: React.FC = () => {
         <div className="theme-color-specials">
           <button
             type="button"
-            className={`theme-color-special${selectedKind === 'wallpaper' ? ' theme-color-special--selected' : ''}`}
+            className={`theme-color-special${isAutoWallpaper ? ' theme-color-special--selected' : ''}`}
+            data-theme-special="wallpaper-auto"
             title={t('theme.wallpaper_pick')}
             onClick={() => { void selectWallpaper(); }}
           >
@@ -580,7 +586,8 @@ export const ThemeSettings: React.FC = () => {
           </button>
           <button
             type="button"
-            className={`theme-color-special${selectedKind === 'wallpaper' ? ' theme-color-special--selected' : ''}`}
+            className={`theme-color-special${isPickedWallpaper ? ' theme-color-special--selected' : ''}`}
+            data-theme-special="wallpaper-pick"
             title={t('theme.pick_wallpaper')}
             onClick={() => { void pickWallpaper(); }}
           >
@@ -591,6 +598,7 @@ export const ThemeSettings: React.FC = () => {
           <button
             type="button"
             className={`theme-color-special${selectedKind === 'matugen' ? ' theme-color-special--selected' : ''}`}
+            data-theme-special="matugen"
             title={t('theme.import_matugen')}
             onClick={() => { void importMatugen(); }}
           >
@@ -601,6 +609,7 @@ export const ThemeSettings: React.FC = () => {
           <button
             type="button"
             className={`theme-color-special${selectedKind === 'custom' ? ' theme-color-special--selected' : ''}`}
+            data-theme-special="custom"
             onClick={() => setPickerOpen(true)}
           >
             <Icon name="colorize" className="theme-color-special-icon" />

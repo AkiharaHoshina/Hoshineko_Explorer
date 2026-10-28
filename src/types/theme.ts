@@ -14,6 +14,13 @@ export interface ThemeConfig {
   presetId?: string;
   /** 壁纸取色的图片绝对路径 */
   wallpaperPath?: string;
+  /**
+   * 壁纸图片的来源动作（决定设置页哪张大卡片高亮）：
+   * - `'auto'`：自动探测当前桌面壁纸（findWallpaper）；
+   * - `'pick'`：用户手动选择图片（内置文件选择器）。
+   * 旧配置没有该字段 → 视为 `'auto'`。
+   */
+  wallpaperSource?: 'auto' | 'pick';
   /** matugen scheme 类型（scheme-rainbow / scheme-tonal-spot 等） */
   scheme?: string;
   /** matugen contrast（-1..1，默认 0） */

@@ -147,7 +147,7 @@ function sanitizeThemeSnapshot(input) {
   const cfg = it.config;
   if (cfg === null) return { config: null, darkMode };
   if (typeof cfg !== 'object') return null;
-  const KINDS = new Set(['preset', 'custom', 'system', 'wallpaper', 'matugen']);
+  const KINDS = new Set(['preset', 'custom', 'wallpaper', 'matugen']);
   if (typeof cfg.kind !== 'string' || !KINDS.has(cfg.kind)) return null;
   const config = { kind: cfg.kind };
   for (const f of ['seed', 'presetId', 'wallpaperPath', 'scheme']) {
@@ -155,6 +155,10 @@ function sanitizeThemeSnapshot(input) {
       if (typeof cfg[f] !== 'string') return null;
       config[f] = cfg[f];
     }
+  }
+  if (cfg.wallpaperSource !== undefined) {
+    if (cfg.wallpaperSource !== 'auto' && cfg.wallpaperSource !== 'pick') return null;
+    config.wallpaperSource = cfg.wallpaperSource;
   }
   if (cfg.contrast !== undefined) {
     if (typeof cfg.contrast !== 'number' || !Number.isFinite(cfg.contrast)) return null;

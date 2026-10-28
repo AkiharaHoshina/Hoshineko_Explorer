@@ -151,7 +151,7 @@ function sanitizeThemeSnapshot(input: unknown): PickerThemeSnapshot | null {
   if (cfg === null) return { config: null, darkMode: darkMode as boolean | null };
   if (typeof cfg !== 'object') return null;
   const c = cfg as Record<string, unknown>;
-  const KINDS = new Set(['preset', 'custom', 'system', 'wallpaper', 'matugen']);
+  const KINDS = new Set(['preset', 'custom', 'wallpaper', 'matugen']);
   if (typeof c.kind !== 'string' || !KINDS.has(c.kind)) return null;
   const config: NonNullable<PickerThemeSnapshot['config']> = {
     kind: c.kind as NonNullable<PickerThemeSnapshot['config']>['kind'],
@@ -162,6 +162,10 @@ function sanitizeThemeSnapshot(input: unknown): PickerThemeSnapshot | null {
       if (typeof v !== 'string') return null;
       config[field] = v;
     }
+  }
+  if (c.wallpaperSource !== undefined) {
+    if (c.wallpaperSource !== 'auto' && c.wallpaperSource !== 'pick') return null;
+    config.wallpaperSource = c.wallpaperSource;
   }
   if (c.contrast !== undefined) {
     if (typeof c.contrast !== 'number' || !Number.isFinite(c.contrast)) return null;

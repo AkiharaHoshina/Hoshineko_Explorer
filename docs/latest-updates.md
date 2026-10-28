@@ -1,5 +1,23 @@
 # 更新日志
 
+## v3.0.1034 — 修复壁纸取色成功后「自定义图片取色」误亮
+
+- 版本号升至 `3.0.1034`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1034.AppImage` / `HoshinekoFM-3.0.1034-size.AppImage`。
+- **缺陷**：两张壁纸类大卡片（壁纸取色=自动探测 / 自定义图片取色=手动选图）
+  保存的都是 `kind: 'wallpaper'`，设置页又都按 `kind === 'wallpaper'` 判定选中，
+  于是任一壁纸主题生效时两张卡同时高亮。
+- **修复**：`ThemeConfig` 新增 `wallpaperSource: 'auto' | 'pick'`，
+  自动探测写入 `'auto'`、手动选图写入 `'pick'`；两张卡分别按来源高亮，
+  旧配置无该字段视为 `'auto'`。快照白名单（main.ts sanitize / harness 副本 /
+  picker 类型 / preload 内联类型）同步新增字段并校验取值，顺带删除 sanitize 中
+  已废弃的 `'system'` kind。
+- 特殊颜色卡新增 `data-theme-special` 标识（wallpaper-auto / wallpaper-pick /
+  matugen / custom），供 e2e 定位。
+- e2e 117（新增）：旧配置→自动卡、手动选图→图片卡、预设不亮特殊卡、
+  matugen 只亮 Matugen 卡；并用伪造 DMS 会话壁纸跑真实「壁纸取色」流程，
+  断言只亮自动卡且 `wallpaperSource=auto`。
+
 ## v3.0.1033 — 修复 Niri + DMS2 壁纸识别不到
 
 - 版本号升至 `3.0.1033`；AppImage 产物名变为

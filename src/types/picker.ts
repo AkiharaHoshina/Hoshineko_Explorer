@@ -107,6 +107,8 @@ export interface PickerThemeSnapshot {
     seed?: string;
     presetId?: string;
     wallpaperPath?: string;
+    /** 壁纸来源动作（区分自动探测/手动选图；旧快照无此字段 = auto） */
+    wallpaperSource?: 'auto' | 'pick';
     scheme?: string;
     contrast?: number;
   } | null;
