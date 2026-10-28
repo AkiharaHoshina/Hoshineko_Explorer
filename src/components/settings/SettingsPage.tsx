@@ -19,7 +19,6 @@ import {
   NavigationSettings,
   FilesSettings,
   DisplaySettings,
-  ThemeSettings,
   SearchSettings,
   PortalSettings,
   ShortcutSettings,
@@ -51,10 +50,6 @@ interface SettingsPageProps {
 function pageTitleOf(parsed: ParsedSettingsPath): string {
   const cat = SETTINGS_CATEGORIES.find((c) => c.id === parsed.cat);
   if (!cat) return t('settings.title');
-  if (parsed.sub !== null) {
-    const subs = parsed.sub === 'theme' && parsed.cat === 'display' ? t('settings.cat_theme') : null;
-    if (subs) return subs;
-  }
   return t(cat.labelKey);
 }
 
@@ -455,10 +450,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ path, isActive, onNa
     switch (cat) {
     case 'navigation': return <NavigationSettings />;
     case 'files': return <FilesSettings />;
-    case 'display':
-      return parsed?.sub === 'theme'
-        ? <ThemeSettings />
-        : <DisplaySettings onNavigate={onNavigate} />;
+    case 'display': return <DisplaySettings />;
     case 'search': return <SearchSettings />;
     case 'portal': return <PortalSettings />;
     case 'shortcut': return <ShortcutSettings />;

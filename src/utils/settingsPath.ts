@@ -4,7 +4,8 @@
  * 路径模型：
  * - `settings://` —— 根页：分类卡片（对象面板同款卡片样式）
  * - `settings://<cat>` —— 分类页（cat ∈ SETTINGS_CATEGORIES）
- * - `settings://display/theme` —— 唯一二级页（主题）
+ * - 多出的路径段一律忽略（v3.0.1015 起无二级页：原
+ *   `settings://display/theme` 归一为 `settings://display`）
  *
  * 分类 id 与 i18n 键、图标在此表驱动登记——新增分类在此加一行，
  * 卡片渲染/面包屑/返回上级/标签页标题自动跟随。
@@ -52,10 +53,9 @@ const LEGACY_CAT_ALIASES: Record<string, string> = {
   'built-in-terminal': 'navigation',
 };
 
-/** 二级子页（cat → 子页 id → 标题 i18n 键）——目前仅 display/theme */
-export const SETTINGS_SUBPAGES: Record<string, { id: string; labelKey: string }[]> = {
-  display: [{ id: 'theme', labelKey: 'settings.cat_theme' }],
-};
+// v3.0.1015：主题内容已并入显示页（settings://display）。旧的
+// `settings://display/theme` 在 parse 时多出的路径段被忽略 → 归一为
+// `settings://display`（固定项/搜索历史里的旧链接继续可用）。
 
 /** 是否为设置虚拟路径（`settings://` 或任意子页形态） */
 export function isSettingsPath(p: string | null | undefined): boolean {
@@ -119,9 +119,8 @@ export function parseSettingsPath(p: string): ParsedSettingsPath | null {
   const cat = SETTINGS_CATEGORIES.find((c) => c.id === segCat);
   if (!cat) return { cat: null, sub: null, focus };
   if (segs.length === 1) return { cat: cat.id, sub: null, focus };
-  const subs = SETTINGS_SUBPAGES[cat.id] ?? [];
-  const sub = subs.find((s) => s.id === segs[1]);
-  return { cat: cat.id, sub: sub ? sub.id : null, focus };
+  // 二级子页已全部并入分类页：多出的路径段一律忽略（旧链接重定向）
+  return { cat: cat.id, sub: null, focus };
 }
 
 /** 归一化：未登记段整体回落根页（防坏 url 停留）。focus 段（搜索
@@ -131,7 +130,6 @@ export function normalizeSettingsPath(p: string): string {
   if (!parsed) return 'settings://';
   const focusSuffix = parsed.focus ? `?focus=${parsed.focus}` : '';
   if (parsed.cat === null) return `settings://${focusSuffix}`;
-  if (parsed.sub !== null) return `settings://${parsed.cat}/${parsed.sub}${focusSuffix}`;
   return `settings://${parsed.cat}${focusSuffix}`;
 }
 
@@ -148,11 +146,6 @@ export function settingsCategoryPath(cat: string): string {
   return `settings://${cat}`;
 }
 
-/** 二级子页导航路径 */
-export function settingsSubpagePath(cat: string, sub: string): string {
-  return `settings://${cat}/${sub}`;
-}
-
 /**
  * 设置路径 → 显示标题（窗口标题/标签页标题同源）：
  * 根 = 「设置」；二级页 = 「设置 · 子页名」；分类页 = 「设置 · 类名」。
@@ -160,9 +153,6 @@ export function settingsSubpagePath(cat: string, sub: string): string {
 export function settingsPathTitle(p: string): string {
   const parsed = parseSettingsPath(p);
   if (!parsed || parsed.cat === null) return t('settings.title');
-  if (parsed.sub === 'theme' && parsed.cat === 'display') {
-    return `${t('settings.title')} · ${t('settings.cat_theme')}`;
-  }
   const cat = SETTINGS_CATEGORIES.find((c) => c.id === parsed.cat);
   return cat ? `${t('settings.title')} · ${t(cat.labelKey)}` : t('settings.title');
 }

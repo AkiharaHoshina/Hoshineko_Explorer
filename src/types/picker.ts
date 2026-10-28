@@ -103,7 +103,7 @@ export interface PickerSettings {
 export interface PickerThemeSnapshot {
   /** 主题颜色配置（null = GUI 未选主题，走 matugen 传统加载） */
   config: {
-    kind: 'preset' | 'custom' | 'system' | 'wallpaper' | 'matugen';
+    kind: 'preset' | 'custom' | 'flag' | 'wallpaper' | 'matugen';
     seed?: string;
     presetId?: string;
     wallpaperPath?: string;

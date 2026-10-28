@@ -125,40 +125,23 @@ const h = require('./harness.cjs');
     // 设置页 → 主题和显示分类（review 26：主题入口行 role=button 进 Tab 序）
     await h.openSettingsPage(win, `/主题和显示|Theme & Display|テーマと表示|테마 및 표시/`);
     await h.waitFor(win, `!!document.querySelector('.settings-row')`, { timeout: 8000 });
-    const rowReady = await h.js(win, `(() => {
-      const rows = [...document.querySelectorAll('.settings-row')];
-      const idx = rows.findIndex((row) => {
-        const label = row.querySelector('.settings-row__label');
-        return !!label && /^(主题|Theme)$/.test((label.textContent ?? '').trim());
-      });
-      const theme = rows[idx];
-      return { idx, role: theme ? theme.getAttribute('role') : null, tabIndex: theme ? theme.getAttribute('tabindex') : null };
-    })()`);
-    h.assert.strictEqual(rowReady.value.role, 'button', '主题入口行应有 role=button');
-    h.assert.strictEqual(rowReady.value.tabIndex, '0', '主题入口行应进入 Tab 序');
-
-    // 焦点放在入口行上 → Enter 激活 → 导航到主题子页（settings://display/theme）
-    await h.js(win, `(() => {
-      const rows = [...document.querySelectorAll('.settings-row')];
-      const idx = rows.findIndex((row) => /^(主题|Theme)$/.test((row.querySelector('.settings-row__label')?.textContent ?? '').trim()));
-      rows[idx]?.focus();
-      return idx >= 0;
-    })()`, true);
-    await h.key(win, 'Enter');
+    // v3.0.1015：主题内容并入显示页（无二级页/入口行）
     await h.waitFor(win, `!!document.querySelector('.theme-color-preset-grid')`, { timeout: 8000 });
     const title = await h.js(win, `document.querySelector('.settings-page .object-panel-title')?.textContent ?? ''`);
-    h.assert.ok(/主题|Theme/.test(title.value), `应导航到主题子页（实际 ${title.value}）`);
-    // 预设色盘 + 特殊颜色卡 + 三按钮（调色盘/选择壁纸/导入 Matugen）
+    h.assert.ok(/主题和显示|Theme & Display|テーマと表示|테마 및 표시/.test(title.value), `应停留在显示分类页（实际 ${title.value}）`);
+    // 预设色盘（12 单色 + 2 旗帜）+ 4 张特殊颜色大卡片（无独立按钮行）
     const themeBody = await h.js(win, `(() => {
       return {
-        presets: document.querySelectorAll('.theme-color-preset').length,
+        seedPresets: document.querySelectorAll('.theme-color-preset:not(.theme-color-preset--flag)').length,
+        flagPresets: document.querySelectorAll('.theme-color-preset--flag').length,
         specials: document.querySelectorAll('.theme-color-special').length,
-        paletteBtns: document.querySelectorAll('.theme-color-palette-row md-outlined-button').length,
+        paletteBtns: document.querySelectorAll('.theme-color-palette-row').length,
       };
     })()`);
-    h.assert.strictEqual(themeBody.value.presets, 12, '预设色盘应有 12 色');
-    h.assert.strictEqual(themeBody.value.specials, 3, '特殊颜色应有 3 卡（系统/壁纸/自定义）');
-    h.assert.strictEqual(themeBody.value.paletteBtns, 2, '应有 选择壁纸/导入 Matugen 两按钮（review 29 移除调色盘按钮）');
+    h.assert.strictEqual(themeBody.value.seedPresets, 12, '预设色盘应有 12 个单色');
+    h.assert.strictEqual(themeBody.value.flagPresets, 2, '应有跨性别/骄傲两面旗帜');
+    h.assert.strictEqual(themeBody.value.specials, 4, '特殊颜色应有 4 张大卡片');
+    h.assert.strictEqual(themeBody.value.paletteBtns, 0, '旧按钮行应已移除');
   });
 
   await h.run('27c 对话框键盘选择滚动量（最小滚动校正）', async () => {

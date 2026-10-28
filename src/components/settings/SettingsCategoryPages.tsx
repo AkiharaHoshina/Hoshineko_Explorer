@@ -10,7 +10,7 @@ import { SettingsPreview } from '../SettingsPreview';
 import { t, getLanguageOptions, type Locale } from '../../i18n';
 import { ICON_SIZE_MIN, ICON_SIZE_MAX, ICON_SIZE_STEP } from '../../utils/iconZoom';
 import { formatNewTabPath } from '../../utils/newTabPath';
-import { THEME_PRESETS, type ThemeConfig } from '../../types/theme';
+import { THEME_FLAGS, THEME_PRESETS, type ThemeConfig } from '../../types/theme';
 import { showToast } from '../../utils/toast';
 import { useSettings } from '../../contexts/SettingsContext';
 import { SettingsSection, SettingsRow, SettingsSelectRow, SettingsSwitchRow, ThreeStateSwitchRow } from './SettingsShared';
@@ -333,39 +333,17 @@ export const FilesSettings: React.FC = () => {
 
 // ── 主题和显示（settings://display） ──
 
-export const DisplaySettings: React.FC<{ onNavigate: (p: string) => void }> = ({ onNavigate }) => {
+export const DisplaySettings: React.FC = () => {
   const s = useSettings();
   const effectiveTitleBar = s.titleBarMode === null
     ? (s.detectedWm ? s.detectedWm.kind !== 'tiling' : true)
     : s.titleBarMode;
   return (
     <>
-      {/* 主题二级页入口（settings://display/theme）：导航行 */}
-      <div className="settings-section">
-        <SettingsRow
-          icon="palette"
-          label={t('settings.cat_theme')}
-          rowId="display-theme-entry"
-          role="button"
-          tabIndex={0}
-          onClick={() => onNavigate('settings://display/theme')}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              // 阻止冒泡到文件区窗口级 Enter：导航重渲染把本行摘出 DOM
-              // 后分区守卫失效，会被误判空选择执行 handleUp 吃掉导航
-              // （review 19 实测同款坑）
-              e.stopPropagation();
-              onNavigate('settings://display/theme');
-            }
-          }}
-        >
-          <span
-            className="settings-theme-dot"
-            style={s.themeConfig?.seed ? { backgroundColor: s.themeConfig.seed } : undefined}
-          />
-        </SettingsRow>
-      </div>
+      {/* 主题（v3.0.1015 起并入本页，原 settings://display/theme 二级页已移除） */}
+      <SettingsSection title={t('settings.cat_theme')} rowId="display-theme">
+        <ThemeSettings />
+      </SettingsSection>
 
       <SettingsSection title={t('settings.title_bar')}>
         <ThreeStateSwitchRow
@@ -459,7 +437,14 @@ const UiScaleRow: React.FC = () => {
   );
 };
 
-// ── 主题（settings://display/theme） ──
+/** 旗帜色条 → CSS 渐变（等分横向条纹，从上到下） */
+const flagStripes = (stripes: string[]): string => {
+  const step = 100 / stripes.length;
+  const stops = stripes.map((c, i) => `${c} ${i * step}% ${(i + 1) * step}%`);
+  return `linear-gradient(to bottom, ${stops.join(', ')})`;
+};
+
+// ── 主题（并入 settings://display，v3.0.1015） ──
 
 export const ThemeSettings: React.FC = () => {
   const s = useSettings();
@@ -541,10 +526,10 @@ export const ThemeSettings: React.FC = () => {
     s.setThemeConfig({ kind: 'matugen' });
   }, [s.setThemeConfig]); // eslint-disable-line react-hooks/exhaustive-deps -- setThemeConfig 为稳定 setter
 
-  const selectSystemTheme = useCallback(() => {
-    if (!dmsInfo.available) return;
-    s.setThemeConfig({ kind: 'system' });
-  }, [dmsInfo.available, s.setThemeConfig]); // eslint-disable-line react-hooks/exhaustive-deps -- setThemeConfig 为稳定 setter
+  /** 选择旗帜主题（Pride 系列：多色，三强调角色各取一色） */
+  const selectFlag = useCallback((presetId: string) => {
+    s.setThemeConfig({ kind: 'flag', presetId, contrast: 0 });
+  }, [s.setThemeConfig]); // eslint-disable-line react-hooks/exhaustive-deps -- setThemeConfig 为稳定 setter
 
   const handlePickerClose = useCallback((color: string | null) => {
     setPickerOpen(false);
@@ -583,6 +568,19 @@ export const ThemeSettings: React.FC = () => {
               onClick={() => selectPreset(p.seed, p.id)}
             />
           ))}
+          {/* 旗帜主题：多色——卡片用横向条纹完整展示旗帜，主题本身取其中
+              三色作 M3 强调色（见 types/theme.ts 的 THEME_FLAGS 说明） */}
+          {THEME_FLAGS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              title={t(`theme.flag.${f.id}`)}
+              aria-label={t(`theme.flag.${f.id}`)}
+              className={`theme-color-preset theme-color-preset--flag${s.themeConfig?.kind === 'flag' && s.themeConfig.presetId === f.id ? ' theme-color-preset--selected' : ''}`}
+              style={{ background: flagStripes(f.stripes) }}
+              onClick={() => selectFlag(f.id)}
+            />
+          ))}
         </div>
       </div>
 
@@ -590,19 +588,6 @@ export const ThemeSettings: React.FC = () => {
       <div className="theme-color-section">
         <div className="theme-color-section-header">{t('theme.special')}</div>
         <div className="theme-color-specials">
-          <button
-            type="button"
-            className={`theme-color-special${selectedKind === 'system' ? ' theme-color-special--selected' : ''}`}
-            disabled={!dmsInfo.available}
-            title={dmsInfo.available ? t('theme.system_desc') : t('theme.system_unavailable')}
-            onClick={selectSystemTheme}
-          >
-            <Icon name="palette" className="theme-color-special-icon" />
-            <span className="theme-color-special-title">{t('theme.system')}</span>
-            <span className="theme-color-special-desc">
-              {dmsInfo.available ? t('theme.system_desc') : t('theme.system_unavailable')}
-            </span>
-          </button>
           <button
             type="button"
             className={`theme-color-special${selectedKind === 'wallpaper' ? ' theme-color-special--selected' : ''}`}
@@ -619,6 +604,26 @@ export const ThemeSettings: React.FC = () => {
           </button>
           <button
             type="button"
+            className={`theme-color-special${selectedKind === 'wallpaper' ? ' theme-color-special--selected' : ''}`}
+            title={t('theme.pick_wallpaper')}
+            onClick={() => { void pickWallpaper(); }}
+          >
+            <Icon name="image" className="theme-color-special-icon" />
+            <span className="theme-color-special-title">{t('theme.pick_wallpaper')}</span>
+            <span className="theme-color-special-desc">{t('theme.pick_wallpaper_desc')}</span>
+          </button>
+          <button
+            type="button"
+            className={`theme-color-special${selectedKind === 'matugen' ? ' theme-color-special--selected' : ''}`}
+            title={t('theme.import_matugen')}
+            onClick={() => { void importMatugen(); }}
+          >
+            <Icon name="file_open" className="theme-color-special-icon" />
+            <span className="theme-color-special-title">{t('theme.import_matugen')}</span>
+            <span className="theme-color-special-desc">{t('theme.import_matugen_desc')}</span>
+          </button>
+          <button
+            type="button"
             className={`theme-color-special${selectedKind === 'custom' ? ' theme-color-special--selected' : ''}`}
             onClick={() => setPickerOpen(true)}
           >
@@ -626,16 +631,6 @@ export const ThemeSettings: React.FC = () => {
             <span className="theme-color-special-title">{t('theme.custom')}</span>
             <span className="theme-color-special-desc">{t('theme.custom_desc')}</span>
           </button>
-        </div>
-        {/* review 29 #5：移除「调色盘」按钮（与自定义色卡职能重复）——
-          保留 选择壁纸 + 导入 matugen */}
-        <div className="theme-color-palette-row">
-          <Button variant="outlined" icon={<Icon name="image" />} onClick={() => { void pickWallpaper(); }}>
-            {t('theme.pick_wallpaper')}
-          </Button>
-          <Button variant="outlined" icon={<Icon name="file_open" />} onClick={() => { void importMatugen(); }}>
-            {t('theme.import_matugen')}
-          </Button>
         </div>
       </div>
 

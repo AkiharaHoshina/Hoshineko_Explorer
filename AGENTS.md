@@ -206,7 +206,8 @@ No unit-test framework — e2e tests live in `scripts/e2e/` (Electron main-proce
   = `surface-container-high`（标签条与 Places 同色，且与文件区至少
   拉开一级高程——`surface-container` 与 `low` 在深色下只差约 4/255，
   视觉上几乎同色）。不要在 TabBar.css 里直接写 `surface-container-*`，
-  否则预设/壁纸/DMS 主题切换时会与文件区脱节。
+  否则预设/壁纸/旗帜主题切换时会与文件区脱节。
+- **主题改版（v3.0.1015，e2e 115 + 05/27/103 更新）**：① **主题并入显示页**——`settings://display/theme` 二级页已删除（`SETTINGS_SUBPAGES`/`settingsSubpagePath` 一并移除），`ThemeSettings` 直接渲染在 `DisplaySettings` 顶部，外裹 `SettingsSection title=主题 rowId="display-theme"`（`SettingsSection` 新增 rowId → `data-settings-row`，供设置搜索深链接）；`parseSettingsPath` 对多出的路径段一律忽略，旧链接 `settings://display/theme` 自动归一为 `settings://display`（固定项/搜索历史继续可用）。面包屑/标题只保留「设置 / 主题和显示」两段。② **旗帜主题 `kind: 'flag'`**：M3 只有 primary/secondary/tertiary 三个强调角色，六色旗无法 1:1——`THEME_FLAGS`（`src/types/theme.ts`）给每面旗映射三色 + `stripes`（UI 条纹预览），`themeEngine.flagToCss` 用 `TonalPalette` 为每个旗舰色建色调梯、**中性色由白色生成（彩度 0）**（跨性别旗的白色走中性色，用户定案），再用 `DynamicScheme` 读 `MaterialDynamicColors` 出整套变量，对比度完全沿用 M3。实测暗色：跨性别 primary `#64d3ff` / secondary `#ffb2c1`，骄傲 primary `#faabff` / secondary `#73dd76` / tertiary `#ffb4a8`。③ **特殊颜色 4 张大卡片**（2×2 自适应网格，原 3 小卡 + 按钮行删除）：壁纸取色（自动探测）/ 自定义图片取色（文件选择器）/ Matugen 主题（默认目录配置）/ 自定义颜色。④ **系统主题彻底移除**：`ThemeKind` 的 `'system'`、`ThemeService` 两个 switch 分支、`dmsColorsToVars`、`loadTheme` 的 DMS 兜底、i18n `theme.system*` 全部删除；`theme:read-dms` IPC **保留**（壁纸取色仍取它的 scheme/contrast 作默认）。picker 主题快照的 kind 联合类型同步改为 `'preset' | 'custom' | 'flag' | 'wallpaper' | 'matugen'`。⑤ 主题相关 e2e 断言老化点：103 主题入口行/三段面包屑、27 入口行 role=button、05 点入口进子页——都已按「同页」语义改写；**e2e 脚本改完先 `node --check`**（本轮 `const reachedSlider` 重复声明导致 Electron 加载失败弹错误框、无窗口、被 timeout 杀成 exit 137，白等 3 分钟）。
 - **上下圆角共用 `--tab-radius: 12px`**：顶部 `border-radius` 与底部
   补角尺寸/半径都引用它，不要再分开写 10/14px。
 - **选中页底部凹角是「向外补角」**：标签本体给内容色，左右各加一个

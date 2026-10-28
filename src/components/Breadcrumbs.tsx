@@ -682,9 +682,6 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
     const cat = parsedSettings.cat !== null
       ? SETTINGS_CATEGORIES.find((c) => c.id === parsedSettings.cat)
       : null;
-    const subLabel = parsedSettings.sub === 'theme' && parsedSettings.cat === 'display'
-      ? t('settings.cat_theme')
-      : null;
     return (
       <div
         ref={scrollRef}
@@ -710,22 +707,9 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
               variant="text"
               onClick={() => onNavigate(`settings://${parsedSettings.cat}`)}
               className="breadcrumb-item"
-              style={{ fontWeight: parsedSettings.sub === null ? 600 : 400 }}
+              style={{ fontWeight: 600 }}
             >
               {t(cat.labelKey)}
-            </Button>
-          </React.Fragment>
-        )}
-        {parsedSettings.sub !== null && subLabel && (
-          <React.Fragment>
-            <span className="breadcrumb-separator">/</span>
-            <Button
-              variant="text"
-              className="breadcrumb-item"
-              style={{ fontWeight: 600 }}
-              onClick={() => onNavigate(`settings://${parsedSettings.cat}/${parsedSettings.sub}`)}
-            >
-              {subLabel}
             </Button>
           </React.Fragment>
         )}

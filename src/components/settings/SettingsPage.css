@@ -373,6 +373,11 @@
   transform: scale(1.1);
 }
 
+.theme-color-preset--flag {
+  /* 旗帜条纹：完整展示多色（圆点预设仍是单色块） */
+  background-size: 100% 100%;
+}
+
 .theme-color-preset--selected {
   border-color: var(--md-sys-color-on-surface);
   box-shadow: 0 0 0 2px var(--md-sys-color-surface), 0 0 0 4px var(--md-sys-color-on-surface);
@@ -380,15 +385,17 @@
 
 /* review 29.1：特殊颜色卡不填满界面——固定宽度与设置主页卡片一致
  * （180px），高度自然（换行小字两行）；flex-wrap 动态排列 */
+/* 特殊颜色：2×2 大卡片（v3.0.1015——原先是 3 张 180px 小卡 + 按钮行） */
 .theme-color-specials {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
 }
 
 .theme-color-specials .theme-color-special {
-  width: 180px;
-  flex-shrink: 0;
+  width: auto;
+  min-height: 96px;
+  justify-content: flex-start;
 }
 
 .theme-color-special {

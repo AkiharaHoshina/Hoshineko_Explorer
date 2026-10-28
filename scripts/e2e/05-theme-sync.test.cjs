@@ -18,15 +18,8 @@ const h = require('./harness.cjs');
     await h.waitFor(winB, `!!document.querySelector('.file-list-item')`);
     await h.sleep(600);
 
-    // A 进入主题子页（settings://display/theme）
+    // A 进入「主题和显示」分类（v3.0.1015 起主题内容直接在本页）
     await h.openSettingsPage(winA, `/主题和显示|Theme & Display/`);
-    await h.waitFor(winA, `!!document.querySelector('.settings-row')`, { timeout: 8000 });
-    await h.js(winA, `(() => {
-      const rows = [...document.querySelectorAll('.settings-row')];
-      const row = rows.find((r) => /^(主题|Theme)$/.test((r.querySelector('.settings-row__label')?.textContent ?? '').trim()));
-      row?.click();
-      return !!row;
-    })()`, true);
     await h.waitFor(winA, `!!document.querySelector('.theme-color-preset')`, { timeout: 8000 });
 
     // 记录选择前 A/B 的注入主题 CSS

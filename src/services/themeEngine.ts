@@ -1,6 +1,8 @@
 import {
   Hct,
   DynamicScheme,
+  TonalPalette,
+  Variant,
   SchemeTonalSpot,
   SchemeVibrant,
   SchemeExpressive,
@@ -188,6 +190,52 @@ export function seedToCss(seed: string, options?: { scheme?: string; contrast?: 
 }
 
 /**
+ * 从旗帜主题（多色）生成整套 M3 颜色方案 CSS（深色 + 浅色）。
+ *
+ * 做法：三个强调角色各自用旗色的色调梯（TonalPalette），中性/表面色
+ * 由白色生成（彩度 0）——旗帜里的白因此落进表面色，不单独占强调角色。
+ * 对比度规则完全沿用 M3（MaterialDynamicColors 按 tone 取值）。
+ *
+ * @param flag - 旗色映射（primary/secondary/tertiary；tertiary 缺省时
+ *   由 secondary 的色相降彩度派生，避免与 secondary 完全相同）
+ * @param options - contrast（-1..1）
+ */
+export function flagToCss(
+  flag: { primary: string; secondary: string; tertiary?: string },
+  options?: { contrast?: number },
+): string {
+  const primary = normalizeHex(flag.primary);
+  const secondary = normalizeHex(flag.secondary);
+  if (!primary || !secondary) return '';
+  const contrast = Math.min(1, Math.max(-1, options?.contrast ?? 0));
+  const white = Hct.fromInt(argbFromHex('#FFFFFF'));
+  const secHct = Hct.fromInt(argbFromHex(secondary));
+  const tertiaryHex = normalizeHex(flag.tertiary ?? '');
+  const tertiaryPalette = tertiaryHex
+    ? TonalPalette.fromInt(argbFromHex(tertiaryHex))
+    : TonalPalette.fromHueAndChroma(secHct.hue, 16);
+  const build = (isDark: boolean) => new DynamicScheme({
+    sourceColorHct: white,
+    variant: Variant.TONAL_SPOT,
+    contrastLevel: contrast,
+    isDark,
+    primaryPalette: TonalPalette.fromInt(argbFromHex(primary)),
+    secondaryPalette: TonalPalette.fromInt(argbFromHex(secondary)),
+    tertiaryPalette,
+    neutralPalette: TonalPalette.fromHueAndChroma(white.hue, 0),
+    neutralVariantPalette: TonalPalette.fromHueAndChroma(white.hue, 4),
+    errorPalette: TonalPalette.fromInt(argbFromHex('#B3261E')),
+  });
+  const dark = schemeToVars(build(true));
+  const light = schemeToVars(build(false));
+  const borderDark = dark['--md-sys-color-outline-variant'];
+  const borderLight = light['--md-sys-color-outline-variant'];
+  if (borderDark) dark['--border-color'] = borderDark;
+  if (borderLight) light['--border-color'] = borderLight;
+  return varsToCss(dark, light);
+}
+
+/**
  * 从注入的主题 CSS 文本解析深色/浅色两套 CSS 变量表。
  *
  * 兼容两种常见结构：
@@ -251,26 +299,6 @@ export function parseThemeCssToVars(css: string): {
   return { dark: decls(darkSource), light: decls(lightSource) };
 }
 
-/**
- * 把 DMS 颜色角色表（snake_case 键）转成 CSS 变量表。
- * 键缺失的角色跳过（前端 CSS 会回退到 fallback.css 的值）。
- */
-export function dmsColorsToVars(colors: { dark: Record<string, string>; light: Record<string, string> }): {
-  dark: Record<string, string>;
-  light: Record<string, string>;
-} {
-  const dark: Record<string, string> = {};
-  const light: Record<string, string> = {};
-  for (const [role, varName] of ROLE_VARS) {
-    if (colors.dark[role]) dark[varName] = colors.dark[role];
-    if (colors.light[role]) light[varName] = colors.light[role];
-  }
-  const borderDark = dark['--md-sys-color-outline-variant'];
-  const borderLight = light['--md-sys-color-outline-variant'];
-  if (borderDark) dark['--border-color'] = borderDark;
-  if (borderLight) light['--border-color'] = borderLight;
-  return { dark, light };
-}
 
 /** 色相（0-360）→ 纯色 hex（用于色盘 UI 绘制） */
 export function hueToHex(hue: number): string {

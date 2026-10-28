@@ -11,9 +11,10 @@ import { t } from '../../i18n';
  * SettingsPage.css），全部**立即生效**（无 pending 草稿）。
  */
 
-/** 分区标题（旧 .settings-section-header 语义） */
-export const SettingsSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="settings-section">
+/** 分区标题（旧 .settings-section-header 语义）
+ *  rowId：设置搜索深链接锚点（整段分区挂 data-settings-row） */
+export const SettingsSection: React.FC<{ title: string; rowId?: string; children: React.ReactNode }> = ({ title, rowId, children }) => (
+  <div className="settings-section" data-settings-row={rowId}>
     <div className="settings-section-header">{title}</div>
     {children}
   </div>

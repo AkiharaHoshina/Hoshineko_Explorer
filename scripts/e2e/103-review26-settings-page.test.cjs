@@ -66,20 +66,25 @@ const { ipcMain } = require('electron');
     // 面包屑：设置胶囊 + 类段
     h.assert.ok((await h.js(win, `!!document.querySelector('.breadcrumb-settings-chip')`)).value, '应有设置面包屑胶囊');
 
-    // 主题入口行 → 子页（settings://display/theme）
-    await h.js(win, `(() => {
-      const rows = [...document.querySelectorAll('.settings-row')];
-      const row = rows.find((r) => /^(主题|Theme)$/.test((r.querySelector('.settings-row__label')?.textContent ?? '').trim()));
-      row?.click();
-      return !!row;
-    })()`, true);
+    // v3.0.1015：主题内容已并入显示页（原 settings://display/theme 二级页移除）
     await h.waitFor(win, `!!document.querySelector('.theme-color-preset-grid')`, { timeout: 8000 });
-    h.assert.ok(/主题|Theme/.test((await h.js(win, `document.querySelector('.settings-page .object-panel-title')?.textContent ?? ''`)).value), '子页标题应为主题');
-    h.assert.ok((await h.js(win, `document.querySelectorAll('.breadcrumb-item').length >= 2`)).value, '子页面包屑应有 设置/主题和显示/主题 三段');
+    h.assert.ok(
+      (await h.js(win, `!!document.querySelector('[data-settings-row="display-theme"]')`)).value,
+      '主题分区应有搜索锚点 display-theme',
+    );
+    h.assert.ok(
+      (await h.js(win, `document.querySelectorAll('.breadcrumb-item').length === 1`)).value,
+      '显示页面包屑应只有 设置/主题和显示 两段',
+    );
 
-    // 返回上级：子页 → 分类页 → 根
-    await h.clickEl(win, '[data-kb-zone="topbar-up"] md-icon-button');
-    await h.waitFor(win, `!!document.querySelector('.settings-titlebar-switch-area')`, { timeout: 8000 });
+    // 旧子页链接仍可用：settings://display/theme 归一为 settings://display
+    await h.clickEl(win, '.omnibar-trigger');
+    await h.waitFor(win, `!!document.querySelector('.omnibar.mode-edit .omnibar-input')`);
+    await h.setReactInput(win, '.omnibar.mode-edit .omnibar-input', 'settings://display/theme');
+    await h.key(win, 'Enter');
+    await h.waitFor(win, `!!document.querySelector('.theme-color-preset-grid')`, { timeout: 8000 });
+
+    // 返回上级：分类页 → 根
     await h.clickEl(win, '[data-kb-zone="topbar-up"] md-icon-button');
     await h.waitFor(win, `!!document.querySelector('.settings-category-grid')`, { timeout: 8000 });
 
@@ -398,30 +403,20 @@ const { ipcMain } = require('electron');
     h.assert.ok(afterVal.value.v !== beforeVal.value, `滑条上 → 应调整数值（${beforeVal.value} → ${afterVal.value.v}）`);
     h.assert.ok(afterVal.value.stillSlider, '滑条上方向键应保持焦点在滑条（不移动落点）');
 
-    // ── 主题页：Tab 可达预设色钮 / 特殊色卡 / 最下两按钮 ──
+    // ── 显示页（主题在最上方）：Tab 可达预设色钮 / 特殊色卡 / 界面缩放滑条 ──
     await h.openSettingsPage(win, `/主题和显示|Theme & Display/`);
-    await h.waitFor(win, `!!document.querySelector('.settings-row')`, { timeout: 8000 });
-    await h.js(win, `(() => {
-      const rows = [...document.querySelectorAll('.settings-row')];
-      const row = rows.find((r) => /^(主题|Theme)$/.test((r.querySelector('.settings-row__label')?.textContent ?? '').trim()));
-      row?.click();
-      return !!row;
-    })()`, true);
     await h.waitFor(win, `!!document.querySelector('.theme-color-preset')`, { timeout: 8000 });
     const reachedPreset = await tabUntil(`!!document.activeElement?.classList.contains('theme-color-preset')`);
     h.assert.ok(reachedPreset, 'Tab 应可达预设颜色按钮（此前被漏掉）');
     const reachedSpecial = await tabUntil(`!!document.activeElement?.classList.contains('theme-color-special')`);
     h.assert.ok(reachedSpecial, 'Tab 应可达特殊颜色卡（此前被漏掉）');
-    const reachedPalette = await tabUntil(`(() => {
-      const a = document.activeElement;
-      return !!a?.closest('.theme-color-palette-row') && /导入|Matugen|matugen/i.test(a.textContent ?? '');
-    })()`);
-    h.assert.ok(reachedPalette, 'Tab 应可达最下方按钮（选择壁纸/导入 Matugen——此前被漏掉）');
-    // 末控件（导入 Matugen）再 Tab → 放行全局循环
+    const reachedUiScale = await tabUntil(`!!document.activeElement?.closest('[data-settings-row="display-ui-scale"]')`);
+    h.assert.ok(reachedUiScale, 'Tab 应可达界面缩放滑条（页面末控件）');
+    // 末控件再 Tab → 放行全局循环
     await h.key(win, 'Tab');
     await h.sleep(200);
     const z = (await zoneOf()).value;
-    h.assert.strictEqual(z, 'sidebar', `主题页末控件 Tab 应放行走全局循环（实际 ${z}）`);
+    h.assert.strictEqual(z, 'sidebar', `显示页末控件 Tab 应放行走全局循环（实际 ${z}）`);
   });
 
   await h.run('103g review29：显示对象面板开关 + Places 内建终端入口', async () => {

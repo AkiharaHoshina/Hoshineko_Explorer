@@ -1,5 +1,5 @@
-import { seedToCss, dmsColorsToVars, varsToCss, parseThemeCssToVars } from './themeEngine';
-import type { ThemeConfig } from '../types/theme';
+import { seedToCss, flagToCss, parseThemeCssToVars } from './themeEngine';
+import { THEME_FLAGS, type ThemeConfig } from '../types/theme';
 
 /** 应用主题 CSS 注入的 <style> 元素 id */
 const THEME_STYLE_ID = 'app-theme';
@@ -51,11 +51,11 @@ export const ThemeService = {
         });
         return css ? parseThemeCssToVars(css) : null;
       }
-      case 'system': {
-        if (!window.electron?.readDmsTheme) return null;
-        const dms = await window.electron.readDmsTheme();
-        if (dms.available && dms.colors) return dmsColorsToVars(dms.colors);
-        return null;
+      case 'flag': {
+        const flag = THEME_FLAGS.find((f) => f.id === config.presetId);
+        if (!flag) return null;
+        const css = flagToCss(flag, { contrast: config.contrast });
+        return css ? parseThemeCssToVars(css) : null;
       }
       case 'wallpaper': {
         if (!window.electron?.genWallpaperTheme || !config.wallpaperPath) return null;
@@ -137,15 +137,10 @@ export const ThemeService = {
         else this.injectCss('');
         return config.seed ?? null;
       }
-      case 'system': {
-        if (!window.electron?.readDmsTheme) { this.injectCss(''); return null; }
-        const dms = await window.electron.readDmsTheme();
-        if (dms.available && dms.colors) {
-          const vars = dmsColorsToVars(dms.colors);
-          this.injectCss(varsToCss(vars.dark, vars.light));
-        } else {
-          this.injectCss('');
-        }
+      case 'flag': {
+        // 旗帜主题（Pride 系列）：三强调色独立成色调梯，中性色由白生成
+        const flag = THEME_FLAGS.find((f) => f.id === config.presetId);
+        this.injectCss(flag ? flagToCss(flag, { contrast: config.contrast }) : '');
         return null;
       }
       case 'wallpaper': {
