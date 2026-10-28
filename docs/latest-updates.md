@@ -1,5 +1,21 @@
 # 更新日志
 
+## v3.0.1032 — 浅色模式侧边栏选中按钮底色加深一级（通用）
+
+- 版本号升至 `3.0.1032`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1032.AppImage` / `HoshinekoFM-3.0.1032-size.AppImage`。
+- **问题重述**：v3.0.1031 只处理了骄傲主题的容器色；实际反馈是**浅色模式下所有
+  侧边栏选中按钮**与侧边栏背景（`surface`）对比过低（截图：选中的「视频」与背景
+  几乎同色），与特殊主题无关。
+- **通用修复**：`.sidebar-item` 新增变量 `--sidebar-active-bg`——深色模式仍是
+  `--md-sys-color-secondary-container`（不变），浅色模式为
+  `color-mix(in srgb, var(--md-sys-color-on-secondary-container) 10%, var(--md-sys-color-secondary-container))`
+  （加深一级）；`.sidebar-item.active` 改用它。
+- 骄傲容器色复用同一变量（`--pride-mix-base: var(--sidebar-active-bg)`），
+  删掉 v3.0.1031 的骄傲专属浅色覆盖，规则收敛为一处。
+- e2e 115 新增：浅色模式下普通（非骄傲）选中条目底色必须比 raw
+  `secondary-container` 更深（按亮度断言）。
+
 ## v3.0.1031 — 浅色模式骄傲按钮底色加深一级
 
 - 版本号升至 `3.0.1031`；AppImage 产物名变为

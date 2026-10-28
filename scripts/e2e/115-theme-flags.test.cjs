@@ -1,5 +1,5 @@
 /**
- * e2e 115：骄傲主题（v3.0.1031）。
+ * e2e 115：骄傲主题（v3.0.1032）。
  *
  * - 主题内容并入 settings://display（旧 settings://display/theme 归一）；
  * - 预设色盘不含旗帜；
@@ -222,6 +222,36 @@ const h = require('./harness.cjs');
     await h.waitFor(win, `!!document.querySelector('.theme-color-preset-grid')`, { timeout: 8000 });
     const title = (await h.js(win, `document.querySelector('.settings-page .object-panel-title')?.textContent ?? ''`)).value;
     h.assert.ok(/主题和显示|Theme & Display/.test(title), `旧子页链接应落到显示页（实际 ${title}）`);
+
+    // ── 10) 浅色模式：普通（非骄傲）选中条目底色应比 secondary-container 加深一级 ──
+    await h.js(win, `window.electron.setThemeSource('light'); true`);
+    await h.sleep(900);
+    await h.clickPlace(win, 'home');
+    await h.sleep(500);
+    const contrast = (await h.js(win, `(() => {
+      const el = document.querySelector('.sidebar-item.active');
+      return {
+        bg: getComputedStyle(el).backgroundColor,
+        sc: getComputedStyle(document.documentElement).getPropertyValue('--md-sys-color-secondary-container').trim(),
+      };
+    })()`)).value;
+    const parseColor = (str) => {
+      let m = (/^rgba?\((\d+),\s*(\d+),\s*(\d+)/).exec(str ?? '');
+      if (m) return [+m[1], +m[2], +m[3]];
+      m = (/srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/).exec(str ?? '');
+      if (m) return [+m[1] * 255, +m[2] * 255, +m[3] * 255];
+      m = (/^#([0-9a-f]{6})$/i).exec(str ?? '');
+      if (m) return [parseInt(m[1].slice(0, 2), 16), parseInt(m[1].slice(2, 4), 16), parseInt(m[1].slice(4, 6), 16)];
+      return null;
+    };
+    const lum = ([r, g, b]) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const bgRGB = parseColor(contrast.bg);
+    const scRGB = parseColor(contrast.sc);
+    h.assert.ok(bgRGB && scRGB, `应能解析选中底色与 secondary-container（${contrast.bg} / ${contrast.sc}）`);
+    h.assert.ok(lum(bgRGB) < lum(scRGB) - 5,
+      `浅色模式选中底色应比 secondary-container 更深（${contrast.bg} vs ${contrast.sc}）`);
+    await h.js(win, `window.electron.setThemeSource('dark'); true`);
+    await h.sleep(500);
   });
 
   h.finish();

@@ -276,6 +276,16 @@
     text-align: left;
     transition: all 0.2s cubic-bezier(0.2, 0.0, 0, 1.0);
     /* Standard easing */
+    /* 选中态底色：深色模式直接用 M3 选中态容器色；浅色模式下它与侧边栏
+       背景对比过低，用 on-secondary-container 加深一级（v3.0.1032 用户定案，
+       与特殊主题无关——所有侧边栏按钮通用） */
+    --sidebar-active-bg: var(--md-sys-color-secondary-container);
+}
+
+@media (prefers-color-scheme: light) {
+    .sidebar-item {
+        --sidebar-active-bg: color-mix(in srgb, var(--md-sys-color-on-secondary-container) 10%, var(--md-sys-color-secondary-container));
+    }
 }
 
 .sidebar-item:hover {
@@ -292,7 +302,7 @@
 }
 
 .sidebar-item.active {
-    background-color: var(--md-sys-color-secondary-container);
+    background-color: var(--sidebar-active-bg);
     color: var(--md-sys-color-on-secondary-container);
 }
 
@@ -493,16 +503,9 @@
 .sidebar-item[data-pride-flag] {
     position: relative;
     overflow: hidden;
-    /* 混色基底：深色模式直接用 M3 选中态容器色；浅色模式下它与页面背景
-       对比过低，改用 on-secondary-container 加深一级（用户定案） */
-    --pride-mix-base: var(--md-sys-color-secondary-container);
+    /* 骄傲容器色复用普通选中态底色（--sidebar-active-bg，已含浅色加深逻辑） */
+    --pride-mix-base: var(--sidebar-active-bg);
     background-color: var(--pride-container);
-}
-
-@media (prefers-color-scheme: light) {
-    .sidebar-item[data-pride-flag] {
-        --pride-mix-base: color-mix(in srgb, var(--md-sys-color-on-secondary-container) 14%, var(--md-sys-color-secondary-container));
-    }
 }
 
 .sidebar-item[data-pride-flag]::before {
