@@ -1,5 +1,5 @@
 /**
- * e2e 115：骄傲主题（v3.0.1029）。
+ * e2e 115：骄傲主题（v3.0.1030）。
  *
  * - 主题内容并入 settings://display（旧 settings://display/theme 归一）；
  * - 预设色盘不含旗帜；
@@ -105,7 +105,7 @@ const h = require('./harness.cjs');
     h.assert.notStrictEqual(s1.disc, s1.bg, `遮罩色应与容器色不同（浅一级，实际 ${s1.disc}）`);
     h.assert.ok(parseFloat(s1.discBorderW) > 0, `遮罩应有细描边（实际 ${s1.discBorderW}）`);
     h.assert.ok(parseFloat(s1.discBorderW) >= 2, '描边应加粗到 2px');
-    h.assert.strictEqual(s1.discTop, '10px', '圆形遮罩应上移 2px 做视觉居中补偿');
+    h.assert.strictEqual(s1.discTop, '12px', '圆形遮罩应与图标盒同心（left/top 12px）');
     h.assert.ok(/255, 255, 255|srgb 1\s+1\s+1/.test(s1.discBorderC ?? ''),
       `跨性别旗描边应为白色（白名单，实际 ${s1.discBorderC}）`);
 
