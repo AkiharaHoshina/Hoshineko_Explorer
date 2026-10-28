@@ -308,7 +308,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
    */
   const [pridePick, setPridePick] = useState<{
     /** 掷色时使用的旗帜 id（设置变更后旧色自动失效，无需 effect 清理） */
-    accent: string | null;
+    accent: string;
     key: string;
     /** 本次随机到的旗色（e2e / 调试：data-pride-color） */
     raw: string;
@@ -316,6 +316,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     band: string;
     /** 容器色（随机旗色混 secondary-container，随主题即时重算） */
     container: string;
+    /** 圆形遮罩描边色 = 旗条最上方（最外侧）那条旗色 */
+    ring: string;
   } | null>(null);
 
   /** 上一次用过的旗色：新颜色不得与它相同（用户定案） */
@@ -342,6 +344,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       raw,
       band: buildPrideBand(flag.stripes),
       container: buildPrideContainer(raw),
+      ring: flag.stripes[0],
     });
   }, [prideAccent]);
 
@@ -350,6 +353,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     rollPride(key);
     onNavigate(path);
   }, [rollPride, onNavigate]);
+
+  /** 该条目是否已应用当前设置的骄傲样式（key 与所掷旗帜都一致） */
+  const prideApplied = (key: string): boolean =>
+    pridePick !== null && pridePick.key === key && pridePick.accent === prideAccent;
 
   /** 当前应挂到条目上的骄傲底色（仅在激活且未被拖拽悬停覆盖时） */
   const prideAttrs = (
@@ -366,16 +373,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     // 激活条目始终带 key（供「外部导航后补着色」的 effect 定位），
     // 只有掷过色且 key/旗一致时才挂样式
     const base = { "data-pride-key": key };
-    if (!pridePick || pridePick.accent !== prideAccent || pridePick.key !== key) return base;
+    if (!pridePick || !prideApplied(key)) return base;
     return {
       ...base,
-      // 两个自定义属性分别驱动容器色与左侧旗条（见 Sidebar.css）——不写死
+      // 自定义属性分别驱动容器色 / 旗条 / 遮罩描边（见 Sidebar.css）——不写死
       // rgb，主题（明暗/种子色）变化时由 CSS 重新求值
       style: {
         "--pride-container": pridePick.container,
         "--pride-band": pridePick.band,
+        "--pride-ring": pridePick.ring,
       } as React.CSSProperties,
-      "data-pride-flag": pridePick.accent ?? undefined,
+      "data-pride-flag": pridePick.accent,
       "data-pride-color": pridePick.raw,
     };
   };
@@ -396,10 +404,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
    */
   useEffect(() => {
     const key = asideRef.current
-      ?.querySelector<HTMLElement>('.sidebar-item.active[data-pride-key]')
+      ?.querySelector<HTMLElement>('[data-pride-key]')
       ?.getAttribute('data-pride-key');
-    if (!key) return;
-    if (pridePick?.key === key && pridePick.accent === prideAccent) return;
+    if (!key || prideApplied(key)) return;
     rollPride(key);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在路径/旗帜变化时触发
   }, [currentPath, prideAccent]);

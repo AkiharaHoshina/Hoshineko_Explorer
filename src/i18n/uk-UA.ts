@@ -1022,8 +1022,6 @@ const ukUA = {
   'pride.flag.demigirl': 'Демігьорл-гордість',
   'pride.flag.bigender': 'Бігендерна гордість',
   'pride.flag.polyamory': 'Поліаморна гордість',
-  'theme.flag.transgender': 'Трансгендерна гордість',
-  'theme.flag.pride': 'Гордість',
   'theme.wallpaper': 'Кольори шпалер',
   'theme.wallpaper_desc': 'Згенеровано з поточних шпалер',
   'theme.wallpaper_pick': 'Натисніть для автовизначення шпалер; якщо не знайдено — оберіть зображення вручну',

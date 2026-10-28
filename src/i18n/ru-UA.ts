@@ -1025,8 +1025,6 @@ const ruUA = {
   'pride.flag.demigirl': 'Демигёрл-гордость',
   'pride.flag.bigender': 'Бигендерная гордость',
   'pride.flag.polyamory': 'Полиаморная гордость',
-  'theme.flag.transgender': 'Трансгендерная гордость',
-  'theme.flag.pride': 'Гордость',
   'theme.wallpaper': 'Цвета обоев',
   'theme.wallpaper_desc': 'Сгенерировано из текущих обоев',
   'theme.wallpaper_pick': 'Нажмите для автоопределения обоев; если не найдено — выберите изображение вручную',

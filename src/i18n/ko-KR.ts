@@ -983,8 +983,6 @@ const koKR = {
   'pride.flag.demigirl': '데미걸 프라이드',
   'pride.flag.bigender': '바이젠더 프라이드',
   'pride.flag.polyamory': '폴리아모리 프라이드',
-  'theme.flag.transgender': '트랜스젠더 프라이드',
-  'theme.flag.pride': '프라이드',
   'theme.wallpaper': '배경화면에서 추출',
   'theme.wallpaper_desc': '현재 배경화면에서 계산하여 생성',
   'theme.wallpaper_pick': '클릭하여 배경화면 자동 감지; 감지되지 않으면 이미지를 수동으로 선택할 수 있습니다',

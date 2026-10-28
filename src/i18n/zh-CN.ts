@@ -982,8 +982,6 @@ const zhCN = {
   'pride.flag.demigirl': '半女孩骄傲',
   'pride.flag.bigender': '双性别骄傲',
   'pride.flag.polyamory': '多爱骄傲',
-  'theme.flag.transgender': '跨性别者骄傲',
-  'theme.flag.pride': '骄傲',
   'theme.wallpaper': '壁纸取色',
   'theme.wallpaper_desc': '根据当前壁纸计算生成',
   'theme.wallpaper_pick': '点击自动探测壁纸；未检测到时可手动选择图片',

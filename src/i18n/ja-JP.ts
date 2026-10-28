@@ -983,8 +983,6 @@ const jaJP = {
   'pride.flag.demigirl': 'デミガール・プライド',
   'pride.flag.bigender': 'バイジェンダー・プライド',
   'pride.flag.polyamory': 'ポリアモリー・プライド',
-  'theme.flag.transgender': 'トランスジェンダー・プライド',
-  'theme.flag.pride': 'プライド',
   'theme.wallpaper': '壁紙から生成',
   'theme.wallpaper_desc': '現在の壁紙から計算して生成',
   'theme.wallpaper_pick': 'クリックで壁紙を自動検出。見つからない場合は手動で画像を選択できます',

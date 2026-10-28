@@ -982,8 +982,6 @@ const zhCT = {
   'pride.flag.demigirl': '半女孩驕傲',
   'pride.flag.bigender': '雙性別驕傲',
   'pride.flag.polyamory': '多愛驕傲',
-  'theme.flag.transgender': '跨性別者驕傲',
-  'theme.flag.pride': '驕傲',
   'theme.wallpaper': '桌布取色',
   'theme.wallpaper_desc': '根據目前桌布計算生成',
   'theme.wallpaper_pick': '點擊自動偵測桌布；未偵測到時可手動選擇圖片',

@@ -481,11 +481,13 @@
 .sidebar-pin-section {
     margin-top: 4px;
 }
-/* ── 骄傲主题（v3.0.1021）：随机容器色 + 左上角斜向旗标 ──
+/* ── 骄傲主题：随机容器色 + 斜穿图标的旗条 + 图标圆形遮罩 ──
  * 容器色 = 每次激活随机取一旗色（--pride-container，inline，24% 混
- * secondary-container）；旗标 = 左上角 18px 方块旋转 45°，内部全饱和
- * 硬边条纹（--pride-band，inline）。两者都由 CSS 变量求值 → 明暗主题
- * 切换即时刷新。收起态不显示旗标，只保留容器色。 */
+ * secondary-container）；旗条 = 96×22 长条绕图标圆心旋转 45°、全饱和
+ * 硬边条纹（--pride-band，inline），两端延伸到胶囊边界；遮罩 = 32px 圆盘
+ * 压在旗条上、图标下，底色为容器色浅一级，2px 描边用旗条最外侧旗色
+ * （--pride-ring，inline）。全部颜色由 CSS 变量求值 → 明暗主题切换即时
+ * 刷新。收起态不显示旗条与遮罩，只保留容器色。 */
 .sidebar-item[data-pride-flag] {
     position: relative;
     overflow: hidden;
@@ -521,18 +523,12 @@
     height: 32px;
     box-sizing: border-box;
     border-radius: 50%;
-    /* 描边：深色主题白、浅色主题黑（与主题变量同一套 prefers-color-scheme 约定） */
-    border: 2px solid #fff;
+    /* 描边 = 旗条最上方（最外侧）那条旗色（--pride-ring，inline，2px） */
+    border: 2px solid var(--pride-ring);
     /* 只有一种状态：始终是容器色浅一级——不随悬停变化（用户定案） */
     background-color: color-mix(in srgb, #fff 14%, var(--pride-container));
     pointer-events: none;
     z-index: 1;
-}
-
-@media (prefers-color-scheme: light) {
-    .sidebar-item[data-pride-flag]::after {
-        border-color: #000;
-    }
 }
 
 .sidebar-item[data-pride-flag] > * {

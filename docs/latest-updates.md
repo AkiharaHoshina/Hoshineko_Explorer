@@ -1,5 +1,28 @@
 # 更新日志
 
+## v3.0.1027 — 骄傲遮罩描边改回旗色 + 特殊主题代码清理
+
+- 版本号升至 `3.0.1027`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1027.AppImage` / `HoshinekoFM-3.0.1027-size.AppImage`。
+- **描边改回动态旗色**：撤回 v3.0.1026 的「深白浅黑」，恢复
+  `2px solid var(--pride-ring)`，`--pride-ring = flag.stripes[0]`（旗条最外侧色），
+  随换旗即时更新、随主题保持旗色本色。
+- **特殊主题代码审查清理**（无行为变化）：
+  - 删除 v3.0.1015 旗帜主题遗留的 12 语言 i18n 键 `theme.flag.transgender` /
+    `theme.flag.pride`（代码中已无引用）；
+  - 删除废弃样式 `.theme-color-preset--flag`；
+  - `PrideFlag.accent`（代表色）字段自「随机容器色」改版后已无消费者，连同 18 条
+    数据一并删除；
+  - 设置搜索索引：骄傲主题行图标 `flag`（图标子集里没有，搜索结果显示方框）
+    改为 `diversity_3`；主题入口行的搜索关键词去掉 `旗帜/骄傲/pride/transgender`
+    等旗帜主题遗留词；
+  - `Sidebar` 内骄傲样式判定抽成 `prideApplied(key)`（`prideAttrs` 与补掷 effect
+    共用一份条件）；`pridePick.accent` 收紧为非空字符串；补掷 effect 的 DOM 选择器
+    简化为 `[data-pride-key]`；
+  - 更新过时注释（18px 方块 / 两个自定义属性 → 旗条 + 遮罩 + 描边）。
+- e2e 115 断言改为：描边 ≥2px 且为当前旗最外侧色（跨性别 #5BCEFA、换骄傲旗后
+  #E40303）、随明暗主题不变；27/103/05 回归通过。
+
 ## v3.0.1026 — 骄傲圆形遮罩描边加粗并跟随明暗主题
 
 - 版本号升至 `3.0.1026`；AppImage 产物名变为

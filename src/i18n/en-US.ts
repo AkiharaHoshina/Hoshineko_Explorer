@@ -991,8 +991,6 @@ const enUS = {
   'pride.flag.demigirl': 'Demigirl pride',
   'pride.flag.bigender': 'Bigender pride',
   'pride.flag.polyamory': 'Polyamory pride',
-  'theme.flag.transgender': 'Transgender Pride',
-  'theme.flag.pride': 'Pride',
   'theme.wallpaper': 'Wallpaper colors',
   'theme.wallpaper_desc': 'Generated from the current wallpaper',
   'theme.wallpaper_pick': 'Click to auto-detect the wallpaper; pick an image manually if not found',

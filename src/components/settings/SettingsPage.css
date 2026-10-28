@@ -373,11 +373,6 @@
   transform: scale(1.1);
 }
 
-.theme-color-preset--flag {
-  /* 旗帜条纹：完整展示多色（圆点预设仍是单色块） */
-  background-size: 100% 100%;
-}
-
 .theme-color-preset--selected {
   border-color: var(--md-sys-color-on-surface);
   box-shadow: 0 0 0 2px var(--md-sys-color-surface), 0 0 0 4px var(--md-sys-color-on-surface);
