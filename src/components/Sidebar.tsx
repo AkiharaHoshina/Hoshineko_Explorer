@@ -323,9 +323,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
    * 骄傲主题：当前被激活条目的随机旗色（**会话内**，不持久化）。
    * 只对当前激活条目生效；切到别的条目后旧条目复原（用户定案）。
    */
-  const [pridePick, setPridePick] = useState<{ key: string; raw: string; bg: string; fg: string } | null>(null);
-  // 设置项变化（换旗/关闭）时清掉旧色
-  useEffect(() => { setPridePick(null); }, [prideAccent]);
+  const [pridePick, setPridePick] = useState<{
+    /** 掷色时使用的旗帜 id（设置变更后旧色自动失效，无需 effect 清理） */
+    accent: string | null;
+    key: string;
+    raw: string;
+    bg: string;
+    fg: string;
+  } | null>(null);
+  /** 上一次用过的旗色：新颜色不得与它相同（用户定案） */
+  const lastPrideRawRef = useRef<string | null>(null);
+  /** 上一次用过的旗帜：换旗后重置去重基准 */
+  const lastPrideFlagRef = useRef<string | null>(null);
 
   /** 激活条目时掷一次旗色（同一条目连续点击也不会连出同色） */
   const rollPride = useCallback((key: string) => {
@@ -334,17 +343,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setPridePick(null);
       return;
     }
-    const pool = flag.colors;
-    let raw = pool[Math.floor(Math.random() * pool.length)];
-    if (pool.length > 1 && pridePick && pridePick.key === key && raw === pridePick.raw) {
-      const others = pool.filter((c) => c !== raw);
-      raw = others[Math.floor(Math.random() * others.length)] ?? raw;
-    }
+    // 不要真随机：新颜色必须与**上一次**用的不同（跨条目/重复点同一条目都算）；
+    // 换了一面旗则不延续上一面的去重基准
+    const last = lastPrideFlagRef.current === flag.id ? lastPrideRawRef.current : null;
+    const pool = flag.colors.length > 1 ? flag.colors.filter((c) => c !== last) : flag.colors;
+    const raw = pool[Math.floor(Math.random() * pool.length)];
+    lastPrideRawRef.current = raw;
+    lastPrideFlagRef.current = flag.id;
     const surface = getComputedStyle(document.documentElement)
       .getPropertyValue("--md-sys-color-surface").trim();
     const bg = mixColor(raw, surface || "#1b1b1f", 0.26) ?? raw;
-    setPridePick({ key, raw, bg, fg: readableTextOn(bg) });
-  }, [prideAccent, pridePick]);
+    setPridePick({ accent: flag.id, key, raw, bg, fg: readableTextOn(bg) });
+  }, [prideAccent]);
 
   /** 导航并掷色（所有"位置类"条目共用） */
   const goWithPride = useCallback((path: string, key: string) => {
@@ -358,7 +368,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     active: boolean,
     dragOver: boolean,
   ): { style?: React.CSSProperties; "data-pride-color"?: string } => {
-    if (!pridePick || !active || dragOver || pridePick.key !== key) return {};
+    if (!pridePick || pridePick.accent !== prideAccent || !active || dragOver || pridePick.key !== key) return {};
     return {
       style: { backgroundColor: pridePick.bg, color: pridePick.fg },
       "data-pride-color": pridePick.raw,

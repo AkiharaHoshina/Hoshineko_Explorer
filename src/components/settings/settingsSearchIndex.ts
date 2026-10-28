@@ -52,8 +52,8 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { rowId: 'files-file-preview', cat: 'files', section: 'settings.section_file_preview', labelKey: 'settings.file_preview', icon: 'preview', keywords: ['预览面板', 'preview'] },
   { rowId: 'files-calculate-dir-size', cat: 'files', section: 'settings.section_file_preview', labelKey: 'settings.calculate_dir_size', subKey: 'settings.calculate_dir_size_desc', icon: 'calculate', keywords: ['目录大小', '文件夹大小', 'dir size'] },
   // ── 主题和显示 ──
-    { rowId: 'display-pride-theme', cat: 'display', section: 'settings.pride_theme', labelKey: 'settings.pride_theme', subKey: 'settings.pride_theme_desc', icon: 'flag', keywords: ['骄傲', '旗帜', '彩虹', 'pride', 'transgender', 'lesbian', 'bisexual'] },
-{ rowId: 'display-theme', cat: 'display', section: null, labelKey: 'settings.cat_theme', icon: 'palette', keywords: ['主题', '颜色', '预设', '旗帜', '骄傲', 'pride', 'transgender', 'theme', 'color'] },
+  { rowId: 'display-pride-theme', cat: 'display', section: 'settings.pride_theme', labelKey: 'settings.pride_theme', subKey: 'settings.pride_theme_desc', icon: 'flag', keywords: ['骄傲', '旗帜', '彩虹', 'pride', 'transgender', 'lesbian', 'bisexual'] },
+  { rowId: 'display-theme', cat: 'display', section: null, labelKey: 'settings.cat_theme', icon: 'palette', keywords: ['主题', '颜色', '预设', '旗帜', '骄傲', 'pride', 'transgender', 'theme', 'color'] },
   { rowId: 'display-show-title-bar', cat: 'display', section: 'settings.title_bar', labelKey: 'settings.show_title_bar', icon: 'web_asset', keywords: ['标题栏', 'title bar'] },
   { rowId: 'display-show-full-path-title', cat: 'display', section: 'settings.title_bar', labelKey: 'settings.show_full_path_title', icon: 'subdirectory_arrow_right', keywords: ['完整路径', '标题栏显示完整路径'] },
   { rowId: 'display-ui-scale', cat: 'display', section: null, labelKey: 'settings.ui_scale', icon: 'zoom_in', keywords: ['界面缩放', '缩放', 'zoom', 'scale'] },

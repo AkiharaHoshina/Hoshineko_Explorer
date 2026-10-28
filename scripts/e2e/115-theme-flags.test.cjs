@@ -72,15 +72,24 @@ const h = require('./harness.cjs');
     h.assert.ok(/^rgb\(/.test(s1.bg ?? ''), '底色应为弱化混色后的 rgb()');
     h.assert.ok(['rgb(0, 0, 0)', 'rgb(255, 255, 255)'].includes(s1.fg), `文字应为黑或白（实际 ${s1.fg}）`);
 
-    // ── 3) 切到另一位置 → 旧条目复原，新条目带色 ──
+    // ── 3) 重复点同一位置 → 颜色必须变化（用户定案：非真随机，不与上一次相同） ──
+    await h.clickPlace(win, 'image');
+    await h.sleep(500);
+    const s1b = await prideState();
+    h.assert.strictEqual(s1b.icon, 'image', '重复点击应仍在图片位置');
+    h.assert.ok(s1b.raw !== null, '重复点击后仍应带骄傲底色');
+    h.assert.ok(s1b.raw !== s1.raw, `重复点击同一位置必须换色（${s1.raw} → ${s1b.raw}）`);
+
+    // ── 4) 切到另一位置 → 旧条目复原，新条目带色且与上一次不同 ──
     await h.clickPlace(win, 'description');
     await h.sleep(500);
     const s2 = await prideState();
     h.assert.strictEqual(s2.icon, 'description', '应切到文档位置');
     h.assert.strictEqual(s2.count, 1, '切走后旧条目不应保留颜色');
     h.assert.ok(s2.raw !== null, '新激活条目应带骄傲底色');
+    h.assert.ok(s2.raw !== s1b.raw, `切换后的颜色不得与切换前相同（${s1b.raw} → ${s2.raw}）`);
 
-    // ── 4) 收起态（图标轨道）同样生效 ──
+    // ── 5) 收起态（图标轨道）同样生效 ──
     await h.clickEl(win, '.sidebar-collapse-btn');
     await h.sleep(400);
     h.assert.ok(
@@ -94,14 +103,14 @@ const h = require('./harness.cjs');
     h.assert.strictEqual(s3.count, 1, '收起态同样只应有当前条目带色');
     h.assert.ok(['#5BCEFA', '#F5A9B8', '#FFFFFF'].includes(s3.raw), `收起态旗色应来自色库（实际 ${s3.raw}）`);
 
-    // ── 5) 设为「无」→ 不再着色 ──
+    // ── 6) 设为「无」→ 不再着色 ──
     await setPride(null);
     await h.clickPlace(win, 'home');
     await h.sleep(500);
     const s4 = await prideState();
     h.assert.strictEqual(s4.count, 0, '「无」时不应有任何骄傲底色');
 
-    // ── 6) 旧子页链接归一（settings://display/theme → settings://display） ──
+    // ── 7) 旧子页链接归一（settings://display/theme → settings://display） ──
     await h.clickEl(win, '.omnibar-trigger');
     await h.waitFor(win, `!!document.querySelector('.omnibar.mode-edit .omnibar-input')`);
     await h.setReactInput(win, '.omnibar.mode-edit .omnibar-input', 'settings://display/theme');

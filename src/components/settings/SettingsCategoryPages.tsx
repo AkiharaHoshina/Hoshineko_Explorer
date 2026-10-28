@@ -614,7 +614,7 @@ export const ThemeSettings: React.FC = () => {
       <div className="theme-color-section">
         <div className="theme-color-section-header">{t('settings.pride_theme')}</div>
         <SettingsSelectRow
-          icon="flag"
+          icon="diversity_3"
           label={t('settings.pride_theme')}
           sub={t('settings.pride_theme_desc')}
           rowId="display-pride-theme"
