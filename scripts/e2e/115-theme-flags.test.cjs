@@ -1,5 +1,5 @@
 /**
- * e2e 115：骄傲主题（v3.0.1022）。
+ * e2e 115：骄傲主题（v3.0.1023）。
  *
  * - 主题内容并入 settings://display（旧 settings://display/theme 归一）；
  * - 预设色盘不含旗帜；
@@ -36,6 +36,7 @@ const h = require('./harness.cjs');
       const active = document.querySelector('.sidebar-item.active');
       const cs = active ? getComputedStyle(active) : null;
       const band = active ? getComputedStyle(active, '::before') : null;
+      const disc = active ? getComputedStyle(active, '::after') : null;
       return {
         count: marked.length,
         flag: active?.dataset.prideFlag ?? null,
@@ -45,6 +46,9 @@ const h = require('./harness.cjs');
         bg: cs ? cs.backgroundColor : null,
         band: band ? band.backgroundImage : null,
         bandDisplay: band ? band.display : null,
+        disc: disc ? disc.backgroundColor : null,
+        discDisplay: disc ? disc.display : null,
+        discZ: disc ? disc.zIndex : null,
         surface: getComputedStyle(document.documentElement).getPropertyValue('--md-sys-color-surface').trim(),
       };
     })()`)).value;
@@ -81,6 +85,10 @@ const h = require('./harness.cjs');
     h.assert.ok(/linear-gradient/.test(s1.band ?? ''), '左上角应有旗标渐变');
     h.assert.ok(stopCount(s1.band) >= 10, `旗标应渲染 5 条硬边色带（色标 ${stopCount(s1.band)}）`);
     h.assert.ok(/^(rgb|color)\(/.test(s1.bg ?? ''), `容器色应为混色结果（实际 ${s1.bg}）`);
+    // 图标圆形遮罩：位于旗标之上、图标之下，颜色 = 容器色加深一级
+    h.assert.notStrictEqual(s1.discDisplay, 'none', '图标下应有圆形遮罩');
+    h.assert.strictEqual(s1.discZ, '1', '遮罩层级应在旗标(0)与图标(2)之间');
+    h.assert.notStrictEqual(s1.disc, s1.bg, `遮罩色应与容器色不同（加深一级，实际 ${s1.disc}）`);
 
     // ── 3) 相邻两次不同色：重复点同一位置必须换色 ──
     await h.clickPlace(win, 'image');
@@ -139,6 +147,7 @@ const h = require('./harness.cjs');
     h.assert.strictEqual(s3.icon, 'image', '收起态也应能切换位置');
     h.assert.strictEqual(s3.count, 1, '收起态同样只应有当前条目带样式');
     h.assert.strictEqual(s3.bandDisplay, 'none', '收起态不应显示旗标');
+    h.assert.strictEqual(s3.discDisplay, 'none', '收起态不应显示图标遮罩');
     h.assert.ok(/^(rgb|color)\(/.test(s3.bg ?? ''), '收起态仍应有容器色');
 
     // ── 8) 设为「无」→ 不再着色 ──

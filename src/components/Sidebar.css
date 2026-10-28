@@ -502,18 +502,43 @@
     width: 96px;
     height: 22px;
     transform-origin: 0 0;
-    transform: rotate(45deg) translateY(-50%);
+    /* 不偏移：旗条中线正好穿过条目左上角 → 45° 后经过图标/遮罩圆心
+       (padding-left 16 + 图标半宽 12 = 28)，旗条居中衬在图标与遮罩之下 */
+    transform: rotate(45deg);
     background: var(--pride-band);
     pointer-events: none;
     z-index: 0;
 }
 
-.sidebar-item[data-pride-flag] > * {
-    position: relative;
+/* 图标底下的圆形遮罩：压在旗标之上、图标之下，颜色 = 当前按钮底色浅一级。
+   层级：图标(2) > 遮罩(1) > 旗标(0) > 胶囊底色。24px 图标居中于 32px 圆盘，
+   圆心 (28,28) 与条目 padding 16 + 图标半宽 12 对齐。 */
+.sidebar-item[data-pride-flag]::after {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: color-mix(in srgb, #fff 14%, var(--pride-container));
+    pointer-events: none;
     z-index: 1;
 }
 
-/* 收起态（图标轨道）：不显示旗标，保留容器色 */
-.sidebar--collapsed .sidebar-item[data-pride-flag]::before {
+/* 悬停时条目底色被 .sidebar-item:hover 覆盖为 surface-container-highest，
+   遮罩跟随实际底色重新提亮 */
+.sidebar-item[data-pride-flag]:hover::after {
+    background-color: color-mix(in srgb, #fff 14%, var(--md-sys-color-surface-container-highest));
+}
+
+.sidebar-item[data-pride-flag] > * {
+    position: relative;
+    z-index: 2;
+}
+
+/* 收起态（图标轨道）：不显示旗标与遮罩（无条纹穿过图标），保留容器色 */
+.sidebar--collapsed .sidebar-item[data-pride-flag]::before,
+.sidebar--collapsed .sidebar-item[data-pride-flag]::after {
     display: none;
 }
