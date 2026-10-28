@@ -610,9 +610,10 @@ export const ThemeSettings: React.FC = () => {
         </div>
       </div>
 
-      {/* 骄傲主题（v3.0.1016）：只影响左侧栏当前激活条目的底色，其余按主题渲染 */}
+      {/* 骄傲主题（v3.0.1016）：只影响左侧栏当前激活条目的底色，其余按主题渲染。
+          分区标题保持「骄傲主题」，设置项名称另用 settings.pride_theme（v3.0.1029） */}
       <div className="theme-color-section">
-        <div className="theme-color-section-header">{t('settings.pride_theme')}</div>
+        <div className="theme-color-section-header">{t('settings.pride_section')}</div>
         <SettingsSelectRow
           icon="diversity_3"
           label={t('settings.pride_theme')}

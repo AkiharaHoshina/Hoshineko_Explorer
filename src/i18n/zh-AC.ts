@@ -209,8 +209,9 @@ const zhAC = {
   'settings.preview_expand': '展开预览',
   // ── 设置弹窗-新增-修改于7月3日第二版 ──
   'settings.behavior': '行为',
-  'settings.pride_theme': '骄傲主题',
-  'settings.pride_theme_desc': '每次点击左侧栏条目时，用所选旗帜的配色随机着色当前条目',
+  'settings.pride_theme': '骄傲侧边栏按钮（实验性）',
+  'settings.pride_theme_desc': '每次点击左侧栏按钮时，用所选旗帜着色当前按钮',
+  'settings.pride_section': '骄傲主题',
   'settings.drag_action': '拖拽文件行为',
   'settings.drag_action_desc': '在应用内把文件拖到文件夹时执行的操作（跨应用拖放不受影响）',
   'settings.drag_action_ask': '每次询问',

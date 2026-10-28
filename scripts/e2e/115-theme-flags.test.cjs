@@ -1,5 +1,5 @@
 /**
- * e2e 115：骄傲主题（v3.0.1028）。
+ * e2e 115：骄傲主题（v3.0.1029）。
  *
  * - 主题内容并入 settings://display（旧 settings://display/theme 归一）；
  * - 预设色盘不含旗帜；
@@ -47,6 +47,7 @@ const h = require('./harness.cjs');
         band: band ? band.backgroundImage : null,
         bandDisplay: band ? band.display : null,
         disc: disc ? disc.backgroundColor : null,
+        discTop: disc ? disc.top : null,
         discDisplay: disc ? disc.display : null,
         discZ: disc ? disc.zIndex : null,
         discBorderW: disc ? disc.borderTopWidth : null,
@@ -76,6 +77,17 @@ const h = require('./harness.cjs');
       `下拉应含 无/跨性别/骄傲（实际 ${JSON.stringify(ui.options.slice(0, 4))}…）`);
     h.assert.ok(ui.options.length >= 10, `应有多种旗帜可选（实际 ${ui.options.length}）`);
 
+    // 设置项改名为「骄傲侧边栏按钮（实验性）」，分区标题仍是「骄傲主题」
+    const texts = (await h.js(win, `(() => {
+      const row = document.querySelector('[data-settings-row="display-pride-theme"]');
+      const headers = [...document.querySelectorAll('.theme-color-section-header')].map((e) => e.textContent.trim());
+      return { text: row?.textContent ?? '', headers };
+    })()`)).value;
+    h.assert.ok(/骄傲侧边栏按钮（实验性）/.test(texts.text), `设置项应为新名称（实际 ${texts.text.slice(0, 40)}）`);
+    h.assert.ok(/每次点击左侧栏按钮时，用所选旗帜着色当前按钮/.test(texts.text), '设置项介绍应为新文案');
+    h.assert.ok(texts.headers.includes('骄傲主题'), `分区标题应保持「骄傲主题」（实际 ${JSON.stringify(texts.headers)}）`);
+
+
     // ── 2) 点击位置 → 随机容器色 + 斜向旗标（跨性别 5 条硬边） ──
     await h.clickPlace(win, 'image');
     await h.sleep(500);
@@ -93,6 +105,7 @@ const h = require('./harness.cjs');
     h.assert.notStrictEqual(s1.disc, s1.bg, `遮罩色应与容器色不同（浅一级，实际 ${s1.disc}）`);
     h.assert.ok(parseFloat(s1.discBorderW) > 0, `遮罩应有细描边（实际 ${s1.discBorderW}）`);
     h.assert.ok(parseFloat(s1.discBorderW) >= 2, '描边应加粗到 2px');
+    h.assert.strictEqual(s1.discTop, '10px', '圆形遮罩应上移 2px 做视觉居中补偿');
     h.assert.ok(/255, 255, 255|srgb 1\s+1\s+1/.test(s1.discBorderC ?? ''),
       `跨性别旗描边应为白色（白名单，实际 ${s1.discBorderC}）`);
 
