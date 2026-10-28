@@ -158,7 +158,7 @@ const h = require('./harness.cjs');
       `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active')) > ${beforeH.value}`,
       { timeout: 4000 },
     );
-    // 触控板垂直滚动不应翻页（横向才是翻页手势）
+    // 竖向小增量（不足一格，且横向分量更小 → 主轴为竖向）不翻页
     const beforeV = await h.js(
       win,
       `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active'))`,
@@ -174,7 +174,52 @@ const h = require('./harness.cjs');
       win,
       `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active'))`,
     );
-    h.assert.strictEqual(afterV.value, beforeV.value, '触控板垂直滚动不应翻页');
+    h.assert.strictEqual(afterV.value, beforeV.value, '竖向不足一格的滚动不应翻页');
+
+    // ── 光滑滚轮：一格被拆成多帧（罗技 M720：4×30，合计 120）也必须翻一页 ──
+    // 实测特征：帧间隔 ~8ms、每帧 15/30，整格合计 120（见 AGENTS.md「滚轮分帧」）
+    const resetToFirst = async () => {
+      await h.js(win, `document.querySelectorAll('.sidebar-dot')[0].click(); true`);
+      await h.sleep(400); // 越过翻页冷却
+    };
+    const activeIdx = async () => (await h.js(
+      win,
+      `[...document.querySelectorAll('.sidebar-page')].findIndex((p) => p.hasAttribute('data-active'))`,
+    )).value;
+    const wheelEvent = async (dx, dy) => {
+      await h.js(
+        win,
+        `document.querySelector('.sidebar-body').dispatchEvent(
+          new WheelEvent('wheel', { deltaX: ${dx}, deltaY: ${dy}, bubbles: true, cancelable: true })); true`,
+      );
+    };
+
+    await resetToFirst();
+    for (let i = 0; i < 4; i++) {
+      await wheelEvent(0, 30);
+      await h.sleep(16);
+    }
+    await h.sleep(350);
+    h.assert.strictEqual(
+      await activeIdx(), 1,
+      '一格拆成 4×30（合计 120）应翻一页（光滑滚轮）',
+    );
+
+    // ── 单格 + 滑行尾：起手 120 后 41ms 起再来 8×15（再 120）也只翻一页 ──
+    await resetToFirst();
+    await wheelEvent(0, 120);
+    await h.sleep(41);
+    for (let i = 0; i < 8; i++) {
+      await wheelEvent(0, 15);
+      await h.sleep(8);
+    }
+    await h.sleep(400);
+    h.assert.strictEqual(
+      await activeIdx(), 1,
+      '单格的滑行尾（冷却期内续帧）不应翻第二页',
+    );
+
+    await resetToFirst();
 
     // ── 圆点悬停放大（单级：进入命中区即放大） ──
     const dotCount = (await h.js(win, `document.querySelectorAll('.sidebar-dot').length`)).value;

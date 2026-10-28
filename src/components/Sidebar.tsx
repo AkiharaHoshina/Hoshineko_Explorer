@@ -168,15 +168,23 @@ const SECTION_TITLE_TOP = 16;
 const DEVICE_HEADER_H = 32;
 /** 分页内容区顶部内边距（.sidebar-body padding-top），需从可用高度中扣除 */
 const BODY_TOP_PADDING = 8;
-/** 触控板翻页阈值（累计横向位移像素） */
+/** 横向（触控板/横向滚轮）翻页阈值（累计位移像素） */
 const WHEEL_FLIP_THRESHOLD = 48;
-/** 鼠标滚轮一格的标准位移（Chromium 下 100/120）：以"一格一页"为 100% 基准 */
+/**
+ * 竖向翻页的一格基准（累计位移像素，100% 灵敏度下）。
+ *
+ * 不再区分设备（用户定案 A：竖向滚动一律翻页）：光滑滚轮（罗技 M720 等）
+ * 把一格拆成多帧 15/30，整格合计仍是 120；离散滚轮一格是 100 或 120。
+ * 取 100 使两种设备都能在一格内触发，余量在翻页时清零。
+ */
 const WHEEL_MOUSE_NOTCH = 100;
 /** 翻页灵敏度范围（百分比）：50%–500% */
 const SENSITIVITY_MIN = 50;
 const SENSITIVITY_MAX = 500;
 /** 翻页冷却（毫秒）：防止惯性/高频事件连续翻过多页 */
 const WHEEL_FLIP_COOLDOWN_MS = 300;
+/** 滚轮累积的静默重置（毫秒）：空档超过此值后不把前后两次零散滚动凑成一格 */
+const WHEEL_ACC_RESET_MS = 800;
 /** 触摸横向拖动翻页阈值 */
 const TOUCH_FLIP_THRESHOLD = 48;
 
@@ -1620,6 +1628,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const showDots = !collapsed && pageCount > 1;
 
   const wheelAccRef = useRef(0);
+  /** 当前累积所在主轴（'y' 竖向 / 'x' 横向）：切换主轴时清零累积 */
+  const wheelAxisRef = useRef<'x' | 'y' | null>(null);
+  /** 最近一次滚轮事件时间：空档超过 WHEEL_ACC_RESET_MS 后重新累计 */
+  const wheelLastEventRef = useRef(0);
   const wheelLastFlipRef = useRef(0);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   /** 触摸滑动刚翻过页：吞掉紧随其后的 click，避免顺带导航到划到的条目 */
@@ -1630,25 +1642,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (collapsed) return;
     if (pageCount <= 1) return;
     if (pinReorderActiveRef.current || getDragState()) return;
-    // 输入设备区分（用户定案）：
-    // - 鼠标滚轮：只看垂直 deltaY；
-    // - 触控板：只看横向 deltaX（横向滑动翻页，垂直滚动不翻）。
-    // 判定：鼠标滚轮无横向分量且垂直步长为 100/120 的整数倍；
-    // 其余（带 deltaX 或小/小数增量）按触控板处理。
-    const isMouseWheel =
-      e.deltaX === 0 &&
-      (e.deltaY % 100 === 0 || e.deltaY % 120 === 0);
-    const isTrackpad = !isMouseWheel;
-    const delta = isTrackpad ? e.deltaX : e.deltaY;
+    // **不区分设备**（用户定案 A：竖向滚动一律翻页，鼠标/触控板一致）：
+    // 取本次事件的**主轴**，对角手势不双计。竖向基准 100px/格（光滑滚轮
+    // 把一格拆成多帧 15/30，合计仍是 120；离散滚轮一格 100/120），横向
+    // 基准 48px（触控板横扫）。
+    const vertical = Math.abs(e.deltaY) >= Math.abs(e.deltaX);
+    const axis = vertical ? 'y' : 'x';
+    const delta = vertical ? e.deltaY : e.deltaX;
     if (!delta) return;
+    // 主轴切换（先竖滑再横扫）：清掉上一轴残留，避免跨轴凑够阈值
+    if (wheelAxisRef.current !== axis) {
+      wheelAxisRef.current = axis;
+      wheelAccRef.current = 0;
+    }
+    // 手势空档（如先轻推 40px 再等一会儿）后重新累计，防止零散小滚动
+    // 累积到一格；与「格与格之间 ~300ms」区分开，取 800ms。
+    const now = performance.now();
+    if (now - wheelLastEventRef.current > WHEEL_ACC_RESET_MS) wheelAccRef.current = 0;
+    wheelLastEventRef.current = now;
     // 灵敏度：百分比同时缩放「翻页阈值」与「翻页冷却」。
-    // 鼠标基准取"一格一页"（100px），因此 50% 需要两格、100% 一格、
-    // 高灵敏度主要缩短冷却（快速滚动时翻得更快）；触控板基准 48px。
+    // 50% 需要两格、100% 一格、高灵敏度主要缩短冷却（快速滚动时翻得更快）。
     const sens = Math.max(SENSITIVITY_MIN, Math.min(SENSITIVITY_MAX, wheelSensitivity)) / 100;
-    const baseThreshold = isMouseWheel ? WHEEL_MOUSE_NOTCH : WHEEL_FLIP_THRESHOLD;
+    const baseThreshold = vertical ? WHEEL_MOUSE_NOTCH : WHEEL_FLIP_THRESHOLD;
     const threshold = baseThreshold / sens;
     const cooldown = WHEEL_FLIP_COOLDOWN_MS / sens;
-    const now = performance.now();
+    // 冷却期内丢弃事件：光滑滚轮的「滑行尾」（单格起手后 40ms 内的续帧，
+    // 总量可达整格）由此吸收，保证一格只翻一页。
     if (now - wheelLastFlipRef.current < cooldown) return;
     wheelAccRef.current += delta;
     if (Math.abs(wheelAccRef.current) >= threshold) {
