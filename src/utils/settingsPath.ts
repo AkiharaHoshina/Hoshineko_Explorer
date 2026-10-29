@@ -20,23 +20,21 @@ export interface SettingsCategory {
   labelKey: string;
   /** 卡片图标（Material Symbols ligature） */
   icon: string;
-  /** 该分类页的设置项数（卡片第三行「N 个项目」；新增设置项时同步更新） */
-  count: number;
 }
 
 /** 设置分类表（根页卡片序 = 数组序） */
 export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   // 导航（v3.0.1007 起）：原「仪表盘」分类并入；内建终端与对象面板的
   // 设置项移入本页作为分区，旧路径经 LEGACY_CAT_ALIASES 重定向
-  { id: 'navigation', labelKey: 'settings.cat_navigation', icon: 'explore', count: 8 },
-  { id: 'files', labelKey: 'settings.cat_files', icon: 'folder', count: 10 },
-  { id: 'display', labelKey: 'settings.cat_display', icon: 'palette', count: 3 },
-  { id: 'search', labelKey: 'settings.cat_search', icon: 'search', count: 4 },
-  { id: 'portal', labelKey: 'settings.cat_portal', icon: 'integration_instructions', count: 3 },
-  { id: 'shortcut', labelKey: 'settings.cat_shortcut', icon: 'bolt', count: 2 },
-  { id: 'i18n', labelKey: 'settings.cat_i18n', icon: 'translate', count: 1 },
-  { id: 'defaultrecovery', labelKey: 'settings.cat_defaults', icon: 'restart_alt', count: 1 },
-  { id: 'about', labelKey: 'settings.cat_about', icon: 'info', count: 2 },
+  { id: 'navigation', labelKey: 'settings.cat_navigation', icon: 'explore' },
+  { id: 'files', labelKey: 'settings.cat_files', icon: 'folder' },
+  { id: 'display', labelKey: 'settings.cat_display', icon: 'palette' },
+  { id: 'search', labelKey: 'settings.cat_search', icon: 'search' },
+  { id: 'portal', labelKey: 'settings.cat_portal', icon: 'integration_instructions' },
+  { id: 'shortcut', labelKey: 'settings.cat_shortcut', icon: 'bolt' },
+  { id: 'i18n', labelKey: 'settings.cat_i18n', icon: 'translate' },
+  { id: 'defaultrecovery', labelKey: 'settings.cat_defaults', icon: 'restart_alt' },
+  { id: 'about', labelKey: 'settings.cat_about', icon: 'info' },
 ];
 
 /**

@@ -12,7 +12,7 @@ import {
   type SettingsPinPayload,
 } from '../../utils/settingsPath';
 import { isSettingsSearchPath, parseSettingsSearchPath } from '../../utils/settingsSearchPath';
-import { searchSettings, settingsSearchTotal } from './settingsSearchIndex';
+import { searchSettings, settingsCategoryCount, settingsSearchTotal } from './settingsSearchIndex';
 import { registerKeyboardZone, focusKeyboardTarget } from '../../utils/focusZones';
 import { gridNavIndex, type GridNavKey } from '../../utils/gridNav';
 import {
@@ -477,6 +477,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ path, isActive, onNa
               <div
                 key={c.id}
                 className="settings-category-card"
+                data-settings-cat={c.id}
                 role="button"
                 tabIndex={0}
                 onClick={() => onNavigate(`settings://${c.id}`)}
@@ -485,7 +486,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ path, isActive, onNa
               >
                 <Icon name={c.icon} className="settings-category-icon" />
                 <div className="settings-category-label">{t(c.labelKey)}</div>
-                <div className="settings-category-count">{t('settings.items_count', c.count)}</div>
+                <div className="settings-category-count">{t('settings.items_count', settingsCategoryCount(c.id))}</div>
               </div>
             ))}
           </div>

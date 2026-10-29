@@ -52,6 +52,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { rowId: 'files-file-preview', cat: 'files', section: 'settings.section_file_preview', labelKey: 'settings.file_preview', icon: 'preview', keywords: ['预览面板', 'preview'] },
   { rowId: 'files-calculate-dir-size', cat: 'files', section: 'settings.section_file_preview', labelKey: 'settings.calculate_dir_size', subKey: 'settings.calculate_dir_size_desc', icon: 'calculate', keywords: ['目录大小', '文件夹大小', 'dir size'] },
   // ── 主题和显示 ──
+  { rowId: 'display-dark-mode', cat: 'display', section: null, labelKey: 'theme.dark_mode', icon: 'dark_mode', keywords: ['深色', '暗色', '亮色', '明暗', '跟随系统', 'dark', 'light'] },
   { rowId: 'display-pride-theme', cat: 'display', section: 'settings.pride_section', labelKey: 'settings.pride_theme', subKey: 'settings.pride_theme_desc', icon: 'diversity_3', keywords: ['骄傲', '旗帜', '彩虹', '侧边栏按钮', '实验性', 'pride', 'transgender', 'lesbian', 'bisexual'] },
   { rowId: 'display-theme', cat: 'display', section: null, labelKey: 'settings.cat_theme', icon: 'palette', keywords: ['主题', '颜色', '预设', 'theme', 'color'] },
   { rowId: 'display-show-title-bar', cat: 'display', section: 'settings.title_bar', labelKey: 'settings.show_title_bar', icon: 'web_asset', keywords: ['标题栏', 'title bar'] },
@@ -106,6 +107,25 @@ export interface SettingsSearchGroup {
   sections: SettingsSearchSection[];
   /** 该组命中总数（组头计数） */
   count: number;
+}
+
+/**
+ * 设置分类的「N 个项目」计数：直接从搜索索引派生，避免硬编码随设置项增删
+ * 漂移（历史 bug：新增「实心图标」「拖拽文件行为」等后卡片仍显示旧数字）。
+ * `overrides` 用于非设置项分类——「关于」页是版本/贡献者/项目地址等信息展示，
+ * 没有索引行，固定显示 2。
+ */
+const CATEGORY_COUNT_OVERRIDES: Record<string, number> = { about: 2 };
+
+/** 取某设置分类的项目数（卡片第三行） */
+export function settingsCategoryCount(catId: string): number {
+  const override = CATEGORY_COUNT_OVERRIDES[catId];
+  if (override !== undefined) return override;
+  let n = 0;
+  for (const row of SETTINGS_SEARCH_INDEX) {
+    if (row.cat === catId) n += 1;
+  }
+  return n;
 }
 
 /** 设置搜索执行体（纯客户端；空词 = 显示全部，review 11 #2 同款语义）。

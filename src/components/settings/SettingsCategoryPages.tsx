@@ -562,7 +562,7 @@ export const ThemeSettings: React.FC = () => {
 
   return (
     <>
-      <div className="theme-page-dark-row">
+      <div className="theme-page-dark-row" data-settings-row="display-dark-mode">
         <ThreeStateSwitchRow
           icon="dark_mode"
           label={t('theme.dark_mode')}
