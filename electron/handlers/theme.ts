@@ -621,144 +621,75 @@ async function genWallpaperTheme(imagePath: string, type: string, contrast: numb
   }
 }
 
-/** Matugen 产物文件名（选择目录时的查找顺序） */
-const MATUGEN_THEME_FILES = ['theme.css', 'colors.json', 'dms-colors.json'] as const;
+/** Matugen 主题文件加载失败原因（前端据此选择提示文案） */
+export type MatugenErrorReason = 'not-found' | 'empty' | 'invalid';
 
 /** Matugen 主题文件加载结果 */
 export interface MatugenFileResult {
   success: boolean;
-  /** 生成的/读取的主题 CSS（dark :root + light 媒体查询） */
+  /** 主题 CSS 全文（要求含 --md-sys-color-* 变量） */
   css?: string;
-  /** 实际解析到的文件路径（目录选择时为用户所选目录内的文件） */
+  /** 实际读取到的文件路径（选择目录时 = 目录下的 theme.css） */
   path?: string;
+  reason?: MatugenErrorReason;
   error?: string;
 }
 
-/** camelCase 颜色键 → snake_case（matugen/DMS 的角色名统一为 snake_case） */
-function toSnakeKey(k: string): string {
-  return k.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
-}
+/** 目录选择时唯一认的文件名（用户定案：只找 theme.css） */
+const MATUGEN_THEME_FILE = 'theme.css';
 
 /**
- * 颜色 JSON（matugen/DMS 产物）→ 主题 CSS。
- * 兼容 `{ colors: { dark, light } }`（DMS dms-colors.json）与 `{ dark, light }`，
- * 角色名支持 snake_case / camelCase，值必须是 hex。缺 dark/light 或核心角色时返回 null。
+ * 读取并校验 Matugen theme.css：
+ * - 空文件 → `empty`；
+ * - 不含 `--md-sys-color-*` 颜色变量（如 GTK @define-color 模板）→ `invalid`。
  */
-function jsonColorsToThemeCss(raw: string): string | null {
-  let data: unknown;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!data || typeof data !== 'object') return null;
-  const root = data as Record<string, unknown>;
-  const colors = (root.colors && typeof root.colors === 'object' ? root.colors : root) as Record<string, unknown>;
-  const dark = colors.dark;
-  const light = colors.light;
-  if (!dark || typeof dark !== 'object' || !light || typeof light !== 'object') return null;
-
-  const normalize = (rec: Record<string, unknown>): Record<string, string> => {
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(rec)) {
-      if (typeof v !== 'string') continue;
-      const val = v.trim();
-      if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(val)) continue;
-      out[toSnakeKey(k)] = val;
-    }
-    return out;
-  };
-  const darkVars = normalize(dark as Record<string, unknown>);
-  const lightVars = normalize(light as Record<string, unknown>);
-  const REQUIRED = ['primary', 'surface', 'on_surface'];
-  if (!REQUIRED.every((r) => darkVars[r] && lightVars[r])) return null;
-
-  const block = (vars: Record<string, string>): string =>
-    Object.entries(vars)
-      .map(([k, v]) => `  --md-sys-color-${k.replace(/_/g, '-')}: ${v};`)
-      .join('\n');
-  return [
-    '/* imported matugen colors */',
-    ':root {',
-    block(darkVars),
-    '}',
-    '@media (prefers-color-scheme: light) {',
-    ':root {',
-    block(lightVars),
-    '}',
-    '}',
-    '',
-  ].join('\n');
-}
-
-/** 读取单个 Matugen 文件（css 直接用；json 转 CSS）；不合法返回 null */
-async function readMatugenFile(filePath: string): Promise<{ css: string } | null> {
-  const ext = path.extname(filePath).toLowerCase();
+async function readMatugenThemeCss(filePath: string): Promise<MatugenFileResult> {
   let raw: string;
   try {
     raw = await fs.readFile(filePath, 'utf-8');
   } catch {
-    return null;
+    return { success: false, reason: 'not-found', error: 'Read failed' };
   }
-  if (ext === '.css') return { css: raw };
-  if (ext === '.json') {
-    const css = jsonColorsToThemeCss(raw);
-    return css ? { css } : null;
+  if (!raw.trim()) return { success: false, reason: 'empty', error: 'Empty file' };
+  if (!/--md-sys-color-[a-zA-Z0-9-]+\s*:/.test(raw)) {
+    return { success: false, reason: 'invalid', error: 'No --md-sys-color-* variables' };
   }
-  // 扩展名未知：先按 JSON 试，再按 CSS（含 --md-sys-color）试
-  const asJson = jsonColorsToThemeCss(raw);
-  if (asJson) return { css: asJson };
-  if (/--md-sys-color-/.test(raw)) return { css: raw };
-  return null;
-}
-
-/** 在目录内查找可用的 Matugen 产物（已知文件名优先，其次任一可解析的 *.json） */
-async function findMatugenFileInDir(dir: string): Promise<string | null> {
-  for (const name of MATUGEN_THEME_FILES) {
-    const p = path.join(dir, name);
-    if ((await readMatugenFile(p)) !== null) return p;
-  }
-  let entries: string[];
-  try {
-    entries = await fs.readdir(dir);
-  } catch {
-    return null;
-  }
-  for (const entry of entries.sort()) {
-    if (path.extname(entry).toLowerCase() !== '.json') continue;
-    const p = path.join(dir, entry);
-    if ((await readMatugenFile(p)) !== null) return p;
-  }
-  return null;
+  return { success: true, css: raw, path: filePath };
 }
 
 /**
- * 加载用户选择的 Matugen 配置文件/目录：
- * - 选文件：按扩展名解析（.css / .json / 其它嗅探）；
- * - 选目录：按 MATUGEN_THEME_FILES 顺序查找，再退而求其次扫 *.json。
- * 失败返回 success:false（前端报错并恢复默认主题）。
+ * 加载用户选择的 Matugen 主题：
+ * - 选文件：必须是 `theme.css`（或任意含 `--md-sys-color-*` 的 .css）；
+ * - 选目录：只在目录里找 `theme.css`（用户定案），找不到即失败。
+ * 失败返回 reason，前端报错并恢复默认主题。
  */
 async function loadMatugenFile(pickedPath: string): Promise<MatugenFileResult> {
   if (typeof pickedPath !== 'string' || !path.isAbsolute(pickedPath)) {
-    return { success: false, error: 'Invalid path' };
+    return { success: false, reason: 'not-found', error: 'Invalid path' };
   }
   let st;
   try {
     st = await fs.stat(pickedPath);
   } catch {
-    return { success: false, error: 'Not found' };
+    return { success: false, reason: 'not-found', error: 'Not found' };
   }
-  let target = pickedPath;
   if (st.isDirectory()) {
-    const found = await findMatugenFileInDir(pickedPath);
-    if (!found) return { success: false, error: 'No matugen theme file in directory' };
-    target = found;
-  } else if (!st.isFile()) {
-    return { success: false, error: 'Not a file' };
+    const target = path.join(pickedPath, MATUGEN_THEME_FILE);
+    try {
+      const themeSt = await fs.stat(target);
+      if (!themeSt.isFile()) throw new Error('not a file');
+    } catch {
+      return { success: false, reason: 'not-found', error: 'No theme.css in directory' };
+    }
+    return readMatugenThemeCss(target);
   }
-  const parsed = await readMatugenFile(target);
-  if (!parsed) return { success: false, error: 'Invalid matugen theme file' };
-  return { success: true, css: parsed.css, path: target };
+  if (!st.isFile()) {
+    return { success: false, reason: 'not-found', error: 'Not a file' };
+  }
+  if (path.extname(pickedPath).toLowerCase() !== '.css') {
+    return { success: false, reason: 'invalid', error: 'Not a CSS file' };
+  }
+  return readMatugenThemeCss(pickedPath);
 }
 
 /** 注册主题颜色相关的 IPC 处理器 */

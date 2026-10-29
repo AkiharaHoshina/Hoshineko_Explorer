@@ -533,9 +533,19 @@ export const FilePicker: React.FC = () => {
    *  search://… 时经此调用，打破 loadPath ↔ handleSearch 互引用环 */
   const handleSearchRef = useRef<((query: string, options: PickerSearchOptions) => Promise<void>) | null>(null);
 
+  /** loadPath 依赖的配置/过滤器快照（loadPath 保持 [] 依赖——init effect 依赖它） */
+  const configRef = useRef<PickerConfig | null>(null);
+  const activeFilterIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    configRef.current = config;
+    activeFilterIdRef.current = activeFilterId;
+  }, [config, activeFilterId]);
+
   /** 进入目录：清空选中与搜索状态；回收站虚拟目录走 listTrash。
    *  选择器无标签页、不支持 search:// 持久化——地址栏输入 search://…
-   *  按普通搜索处理（解析后发起搜索，见 handleSearchRef） */
+   *  按普通搜索处理（解析后发起搜索，见 handleSearchRef）。
+   *  地址栏粘贴的是**文件**完整路径时：进入其父目录，并按模式定位——
+   *  选择器选中该文件，保存器把它填进文件名输入框（v3.0.1036）。 */
   const loadPath = useCallback(async (path: string) => {
     try {
       setSearchActive(false);
@@ -560,18 +570,54 @@ export const FilePicker: React.FC = () => {
         setLastSelectedPath(null);
         return;
       }
+
+      // 文件路径（而非目录）：进入父目录并按模式定位，绝不 listDir 文件本身。
+      // 保存模式允许目标文件尚不存在（保存就是要新建），只要父目录可用即可。
+      const st = await window.electron.stat(path).catch(() => null);
+      const cfg = configRef.current;
+      const sep = path.lastIndexOf('/');
+      const isFileLike = !(st && st.isDirectory) && sep > 0;
+      if (isFileLike && (cfg?.mode === 'save' || (st && !st.isDirectory))) {
+        const parent = path.slice(0, sep);
+        const name = path.slice(sep + 1);
+        let listing: Awaited<ReturnType<typeof FileSystemService.listDir>> | null = null;
+        try {
+          listing = await FileSystemService.listDir(parent);
+        } catch {
+          listing = null;
+        }
+        if (listing) {
+          setFiles(listing.data);
+          setCurrentPath(listing.actualPath);
+          setSelected(new Set());
+          setLastSelectedPath(null);
+          if (cfg?.mode === 'save') {
+            if (name) setFileName(name);
+          } else {
+            const target = listing.data.find((f) => f.path === path);
+            if (target && isSelectableFor(target, activeFilterIdRef.current, cfg)) {
+              setSelected(new Set([path]));
+              setLastSelectedPath(path);
+            }
+          }
+          return;
+        }
+        // 父目录也不可用：落到下面的普通路径加载，由 listDir 报错
+      }
+
       const { data, actualPath, error } = await FileSystemService.listDir(path);
       setFiles(data);
       setCurrentPath(actualPath);
       setSelected(new Set());
       setLastSelectedPath(null);
-      if (error && actualPath !== path) {
+      // 只有真正的权限错误才提示「权限不足」（ENOTDIR 等由上面的文件分支消化）
+      if (error && actualPath !== path && (error.code === 'EACCES' || error.code === 'EPERM')) {
         showToast(t('error.permission_denied'), 'error');
       }
     } catch {
       showToast(t('error.cannot_access'), 'error');
     }
-  }, []);
+  }, [isSelectableFor]);
 
   /** 读取选择器配置，设置窗口标题，并从家目录开始浏览 */
   useEffect(() => {
@@ -1409,6 +1455,7 @@ export const FilePicker: React.FC = () => {
                 onSearch={(q) => { void handleSearch(q); }}
                 searchStateEnabled
                 searchDisabled={searchDisabled}
+                allowMissingPath={isSave}
                 externalSearchActive={searchActive}
                 onCloseSearch={() => { void handleCancelSearch(); }}
               />

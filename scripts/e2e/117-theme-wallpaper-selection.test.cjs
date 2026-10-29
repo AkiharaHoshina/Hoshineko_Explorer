@@ -128,7 +128,7 @@ const path = require('path');
     h.assert.strictEqual(await descOf('wallpaper-pick'), baseDescs.pick, '自动取色生效时图片卡应恢复介绍');
 
     // ── 6) Matugen 卡：生效显示配置文件路径，换主题恢复介绍 ──
-    const matuCss = ':root { --md-sys-color-primary: #112233; }\n@media (prefers-color-scheme: light) { :root { --md-sys-color-primary: #332211; } }\n';
+    const matuCss = ':root { --md-sys-color-primary: #112233; --md-sys-color-surface: #000000; --md-sys-color-on-surface: #ffffff; }\n@media (prefers-color-scheme: light) { :root { --md-sys-color-primary: #332211; } }\n';
     const matuFile = path.join(h.tempDir(), 'theme.css');
     fs.writeFileSync(matuFile, matuCss);
     await setTheme({ kind: 'matugen', matugenPath: matuFile });
@@ -146,18 +146,23 @@ const path = require('path');
     await h.waitFor(win, `!!document.querySelector('[data-theme-special="matugen"]')`, { timeout: 8000 });
     h.assert.strictEqual(await descOf('matugen'), baseDescs.matugen, '切到其他主题后 Matugen 卡应恢复介绍');
 
-    // ── 7) theme:load-matugen：目录查找 / 颜色 JSON / 失败 ──
+    // ── 7) theme:load-matugen：只认 theme.css / 失败原因 ──
     const loadMatugen = async (p) => (await h.js(win, `window.electron.loadMatugen(${JSON.stringify(p)})`)).value;
 
-    // 目录内 theme.css 优先
+    // 目录内 theme.css
     const cssDir = h.tempDir();
     fs.writeFileSync(path.join(cssDir, 'theme.css'), matuCss);
     fs.writeFileSync(path.join(cssDir, 'colors.json'), '{}');
     const fromDir = await loadMatugen(cssDir);
     h.assert.ok(fromDir?.success, `目录选择应成功（${JSON.stringify(fromDir)}）`);
-    h.assert.strictEqual(fromDir?.path, path.join(cssDir, 'theme.css'), '目录内应优先命中 theme.css');
+    h.assert.strictEqual(fromDir?.path, path.join(cssDir, 'theme.css'), '目录内应命中 theme.css');
 
-    // 只有颜色 JSON 的目录（DMS/matugen 产物）
+    // 直接选中文件
+    const directFile = await loadMatugen(path.join(cssDir, 'theme.css'));
+    h.assert.ok(directFile?.success, '直接选中 theme.css 应成功');
+    h.assert.strictEqual(directFile?.path, path.join(cssDir, 'theme.css'), '应报告所选文件路径');
+
+    // 目录里只有 colors.json → not-found（用户定案：只找 theme.css）
     const jsonDir = h.tempDir();
     fs.writeFileSync(path.join(jsonDir, 'colors.json'), JSON.stringify({
       colors: {
@@ -166,16 +171,30 @@ const path = require('path');
       },
     }));
     const fromJson = await loadMatugen(jsonDir);
-    h.assert.ok(fromJson?.success, '颜色 JSON 应能转换为主题');
-    h.assert.ok(/--md-sys-color-on-surface/.test(fromJson?.css ?? ''), '转换结果应含 M3 角色变量');
-    h.assert.strictEqual(fromJson?.path, path.join(jsonDir, 'colors.json'), '应报告实际命中的 JSON 文件');
+    h.assert.strictEqual(fromJson?.success, false, '目录内没有 theme.css 应失败');
+    h.assert.strictEqual(fromJson?.reason, 'not-found', `失败原因应为 not-found（实际 ${fromJson?.reason}）`);
 
-    // 空目录 / 不存在 / 无效 JSON
-    h.assert.strictEqual((await loadMatugen(h.tempDir()))?.success, false, '空目录应失败');
-    h.assert.strictEqual((await loadMatugen(path.join(h.tempDir(), 'nope.css')))?.success, false, '不存在的文件应失败');
-    const badDir = h.tempDir();
-    fs.writeFileSync(path.join(badDir, 'colors.json'), '{"foo":1}');
-    h.assert.strictEqual((await loadMatugen(badDir))?.success, false, '无效 JSON 应失败');
+    // 空 theme.css → empty
+    const emptyDir = h.tempDir();
+    fs.writeFileSync(path.join(emptyDir, 'theme.css'), '');
+    const emptyRes = await loadMatugen(emptyDir);
+    h.assert.strictEqual(emptyRes?.success, false, '空 theme.css 应失败');
+    h.assert.strictEqual(emptyRes?.reason, 'empty', `失败原因应为 empty（实际 ${emptyRes?.reason}）`);
+
+    // 无 --md-sys-color-* 的 css → invalid
+    const badCssDir = h.tempDir();
+    fs.writeFileSync(path.join(badCssDir, 'theme.css'), ':root { --primary: #123456; }\n');
+    const badRes = await loadMatugen(badCssDir);
+    h.assert.strictEqual(badRes?.success, false, '无 M3 变量的 css 应失败');
+    h.assert.strictEqual(badRes?.reason, 'invalid', `失败原因应为 invalid（实际 ${badRes?.reason}）`);
+
+    // 不存在路径 / 非 css 文件
+    const missing = await loadMatugen(path.join(h.tempDir(), 'nope.css'));
+    h.assert.strictEqual(missing?.success, false, '不存在的文件应失败');
+    h.assert.strictEqual(missing?.reason, 'not-found', '不存在路径原因应为 not-found');
+    const jsonFile = await loadMatugen(path.join(jsonDir, 'colors.json'));
+    h.assert.strictEqual(jsonFile?.success, false, '选中 JSON 文件应失败');
+    h.assert.strictEqual(jsonFile?.reason, 'invalid', '非 CSS 文件原因应为 invalid');
   });
 
   h.finish();

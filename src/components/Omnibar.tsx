@@ -50,6 +50,12 @@ interface OmnibarProps {
    */
   searchDisabled?: boolean;
   /**
+   * 允许提交**尚不存在**的路径（仅保存器）：保存操作的目标文件本来就要
+   * 新建，编辑态严格存在性校验会把它挡在导航之前。开启后跳过 exists 校验，
+   * 由 FilePicker.loadPath 的保存分支进入父目录并填文件名。
+   */
+  allowMissingPath?: boolean;
+  /**
    * 外部搜索活动态（review 19 P4 选择器同步）：选择器无虚拟路径——
    * 搜索退出（如文件区焦点 Esc）时 currentPath 不变、渲染期复位块不触发，
    * 模式会残留在搜索态。选择器传 searchActive，false 变迁时复位回
@@ -279,6 +285,7 @@ const StateMachineOmnibar: React.FC<OmnibarProps & { common: OmnibarCommon }> = 
   onCloseSearch,
   onSearchContextMenu,
   searchDisabled,
+  allowMissingPath = false,
   externalSearchActive = false,
   active = true,
   common,
@@ -360,10 +367,12 @@ const StateMachineOmnibar: React.FC<OmnibarProps & { common: OmnibarCommon }> = 
       // 为 trash://… 虚拟形态），`~` 展开为家目录
       const home = await window.electron.getHomePath();
       const target = expandAddressPath(trimmed, currentPath, home);
-      const exists = await window.electron.exists(target).catch(() => false);
-      if (!exists) {
-        showToast(t('error.address_not_exist'), 'error');
-        return;
+      if (!allowMissingPath) {
+        const exists = await window.electron.exists(target).catch(() => false);
+        if (!exists) {
+          showToast(t('error.address_not_exist'), 'error');
+          return;
+        }
       }
       setMode('breadcrumbs');
       onNavigate(target);

@@ -519,9 +519,10 @@ export const ThemeSettings: React.FC = () => {
   }, [applyWallpaper, wallpaperBusy]);
 
   /**
-   * Matugen 主题：选择器（items 模式，文件/目录皆可）选择配置文件；
-   * 选目录时后端按 theme.css → colors.json → dms-colors.json → 任一可解析
-   * *.json 的顺序查找。解析失败（找不到/内容无效）→ 报错并恢复预设紫色。
+   * Matugen 主题：选择器（items 模式）选 `theme.css` 或包含 `theme.css` 的目录。
+   * 只接受含 `--md-sys-color-*` 的颜色 CSS；单模式（仅 dark）也接受——
+   * light 模式沿用主题默认变量。失败（找不到/为空/无有效颜色）→ 按原因
+   * 报错并恢复预设紫色。
    */
   const importMatugen = useCallback(async () => {
     if (!window.electron?.loadMatugen || !window.electron?.openPicker) return;
@@ -530,11 +531,16 @@ export const ThemeSettings: React.FC = () => {
     if (!pickedPath) return;
     const res = await window.electron.loadMatugen(pickedPath);
     const vars = res.success && res.css ? parseThemeCssToVars(res.css) : { dark: {}, light: {} };
-    /** Matugen CSS 必须同时给出 dark/light 的核心角色，才算可用 */
+    /** dark 至少要有三件核心角色才算可用（light 缺省视为单模式 CSS） */
     const hasCoreRoles = (table: Record<string, string>) =>
       !!table['--md-sys-color-primary'] && !!table['--md-sys-color-surface'] && !!table['--md-sys-color-on-surface'];
-    if (!res.success || !res.path || !hasCoreRoles(vars.dark) || !hasCoreRoles(vars.light)) {
-      showToast(t('theme.matugen_invalid'), 'error');
+    if (!res.success || !res.path || !hasCoreRoles(vars.dark)) {
+      const reasonKey = res.reason === 'not-found'
+        ? 'theme.matugen_not_found'
+        : res.reason === 'empty'
+          ? 'theme.matugen_empty'
+          : 'theme.matugen_invalid';
+      showToast(t(reasonKey), 'error');
       const purple = THEME_PRESETS.find((p) => p.id === 'purple')?.seed ?? '#6750A4';
       s.setThemeConfig({ kind: 'preset', seed: purple, presetId: 'purple', scheme: 'scheme-tonal-spot', contrast: 0 });
       return;

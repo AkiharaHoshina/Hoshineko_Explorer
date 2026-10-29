@@ -1,5 +1,30 @@
 # 更新日志
 
+## v3.0.1036 — 地址栏粘贴文件路径 + Matugen 只认 theme.css + 放宽校验
+
+- 版本号升至 `3.0.1036`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1036.AppImage` / `HoshinekoFM-3.0.1036-size.AppImage`。
+- **选择器/保存器地址栏粘贴完整文件路径**：此前提交文件路径会走 `listDir(文件)`,
+  抛 ENOTDIR 后被兜底成父目录 + error，选择器一律提示「权限不足」且不选中文件。
+  现在先 `stat`——文件则进入父目录并按模式定位：选择器选中该文件；保存器把文件名
+  填入文件名输入框（**允许目标文件尚不存在**，保存本就要新建）。只有
+  EACCES/EPERM 才提示权限不足。Omnibar 新增 `allowMissingPath`（保存器启用）
+  跳过编辑态的存在性校验。
+- **Matugen 卡语义收敛**：选文件只接受 `.css`；选目录**只找该目录下的
+  `theme.css`**（不再接受 colors.json / dms-colors.json 等 JSON 转换）。
+- **修复「选中正常的 theme.css 也报没找到」**：
+  - 校验只要求 dark 的 `primary / surface / on-surface` 三件核心角色——单模式
+    （仅 dark）theme.css 也接受，light 沿用主题默认变量；此前强制 dark+light
+    都要齐全，常见 matugen 产物直接被判无效；
+  - 失败原因细分并分别提示：找不到 theme.css / 文件为空 / 无 `--md-sys-color-*`
+    颜色（12 语言新增 `theme.matugen_empty`，重写 `theme.matugen_not_found`
+    与 `theme.matugen_invalid` 文案）；
+  - 空文件不再被当成「找不到」（本机 `~/.config/matugen/theme.css` 实际就是
+    0 字节，此前报错文案误导）。
+- e2e 117 更新（目录只认 theme.css、empty/invalid/not-found 三种原因、单模式可接受）；
+  新增 e2e 118（粘贴文件路径→父目录+选中、粘贴目录、保存器粘不存在路径→填文件名）。
+  06/93/05 回归通过。
+
 ## v3.0.1035 — 壁纸卡副标题对称 + Matugen 卡改为选择配置文件
 
 - 版本号升至 `3.0.1035`；AppImage 产物名变为
