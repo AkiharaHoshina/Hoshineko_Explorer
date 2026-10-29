@@ -156,7 +156,7 @@ function sanitizeThemeSnapshot(input: unknown): PickerThemeSnapshot | null {
   const config: NonNullable<PickerThemeSnapshot['config']> = {
     kind: c.kind as NonNullable<PickerThemeSnapshot['config']>['kind'],
   };
-  for (const field of ['seed', 'presetId', 'wallpaperPath', 'scheme'] as const) {
+  for (const field of ['seed', 'presetId', 'wallpaperPath', 'matugenPath', 'scheme'] as const) {
     const v = c[field];
     if (v !== undefined) {
       if (typeof v !== 'string') return null;
@@ -730,9 +730,12 @@ if (!SERVICE_ONLY_MODE && !CLI_ACTION) {
   }
 }
 
-ipcMain.handle('theme:get-css', async () => {
-  const homeDir = os.homedir();
-  const themePath = path.join(homeDir, '.config', 'matugen', 'theme.css');
+ipcMain.handle('theme:get-css', async (_event, customPath?: unknown) => {
+  // 指定了 Matugen 配置文件（设置 → 主题 → Matugen 卡）时读它，否则回落
+  // 传统默认路径；路径只接受绝对路径（渲染进程来源可信，但仍做基本校验）
+  const themePath = typeof customPath === 'string' && path.isAbsolute(customPath)
+    ? customPath
+    : path.join(os.homedir(), '.config', 'matugen', 'theme.css');
   try {
     return await fs.readFile(themePath, 'utf-8');
   } catch {

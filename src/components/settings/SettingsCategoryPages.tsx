@@ -11,6 +11,7 @@ import { t, getLanguageOptions, type Locale } from '../../i18n';
 import { ICON_SIZE_MIN, ICON_SIZE_MAX, ICON_SIZE_STEP } from '../../utils/iconZoom';
 import { formatNewTabPath } from '../../utils/newTabPath';
 import { THEME_PRESETS, type ThemeConfig } from '../../types/theme';
+import { parseThemeCssToVars } from '../../services/themeEngine';
 import { PRIDE_FLAGS } from '../../types/pride';
 import { showToast } from '../../utils/toast';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -517,8 +518,28 @@ export const ThemeSettings: React.FC = () => {
     await applyWallpaper(path, 'pick');
   }, [applyWallpaper, wallpaperBusy]);
 
-  const importMatugen = useCallback(() => {
-    s.setThemeConfig({ kind: 'matugen' });
+  /**
+   * Matugen 主题：选择器（items 模式，文件/目录皆可）选择配置文件；
+   * 选目录时后端按 theme.css → colors.json → dms-colors.json → 任一可解析
+   * *.json 的顺序查找。解析失败（找不到/内容无效）→ 报错并恢复预设紫色。
+   */
+  const importMatugen = useCallback(async () => {
+    if (!window.electron?.loadMatugen || !window.electron?.openPicker) return;
+    const picked = await window.electron.openPicker({ mode: 'items' });
+    const pickedPath = picked?.[0];
+    if (!pickedPath) return;
+    const res = await window.electron.loadMatugen(pickedPath);
+    const vars = res.success && res.css ? parseThemeCssToVars(res.css) : { dark: {}, light: {} };
+    /** Matugen CSS 必须同时给出 dark/light 的核心角色，才算可用 */
+    const hasCoreRoles = (table: Record<string, string>) =>
+      !!table['--md-sys-color-primary'] && !!table['--md-sys-color-surface'] && !!table['--md-sys-color-on-surface'];
+    if (!res.success || !res.path || !hasCoreRoles(vars.dark) || !hasCoreRoles(vars.light)) {
+      showToast(t('theme.matugen_invalid'), 'error');
+      const purple = THEME_PRESETS.find((p) => p.id === 'purple')?.seed ?? '#6750A4';
+      s.setThemeConfig({ kind: 'preset', seed: purple, presetId: 'purple', scheme: 'scheme-tonal-spot', contrast: 0 });
+      return;
+    }
+    s.setThemeConfig({ kind: 'matugen', matugenPath: res.path });
   }, [s.setThemeConfig]); // eslint-disable-line react-hooks/exhaustive-deps -- setThemeConfig 为稳定 setter
 
   const handlePickerClose = useCallback((color: string | null) => {
@@ -579,7 +600,8 @@ export const ThemeSettings: React.FC = () => {
             <Icon name={wallpaperBusy ? 'progress_activity' : 'wallpaper'} className="theme-color-special-icon" />
             <span className="theme-color-special-title">{t('theme.wallpaper')}</span>
             <span className="theme-color-special-desc">
-              {s.themeConfig?.kind === 'wallpaper' && s.themeConfig.wallpaperPath
+              {/* 路径只显示在生效的那张卡上；其余情况回到介绍文案 */}
+              {isAutoWallpaper && s.themeConfig?.wallpaperPath
                 ? s.themeConfig.wallpaperPath
                 : t('theme.wallpaper_desc')}
             </span>
@@ -593,7 +615,11 @@ export const ThemeSettings: React.FC = () => {
           >
             <Icon name="image" className="theme-color-special-icon" />
             <span className="theme-color-special-title">{t('theme.pick_wallpaper')}</span>
-            <span className="theme-color-special-desc">{t('theme.pick_wallpaper_desc')}</span>
+            <span className="theme-color-special-desc">
+              {isPickedWallpaper && s.themeConfig?.wallpaperPath
+                ? s.themeConfig.wallpaperPath
+                : t('theme.pick_wallpaper_desc')}
+            </span>
           </button>
           <button
             type="button"
@@ -604,7 +630,11 @@ export const ThemeSettings: React.FC = () => {
           >
             <Icon name="file_open" className="theme-color-special-icon" />
             <span className="theme-color-special-title">{t('theme.import_matugen')}</span>
-            <span className="theme-color-special-desc">{t('theme.import_matugen_desc')}</span>
+            <span className="theme-color-special-desc">
+              {selectedKind === 'matugen' && s.themeConfig?.matugenPath
+                ? s.themeConfig.matugenPath
+                : t('theme.import_matugen_desc')}
+            </span>
           </button>
           <button
             type="button"

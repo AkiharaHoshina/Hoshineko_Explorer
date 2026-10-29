@@ -150,7 +150,7 @@ function sanitizeThemeSnapshot(input) {
   const KINDS = new Set(['preset', 'custom', 'wallpaper', 'matugen']);
   if (typeof cfg.kind !== 'string' || !KINDS.has(cfg.kind)) return null;
   const config = { kind: cfg.kind };
-  for (const f of ['seed', 'presetId', 'wallpaperPath', 'scheme']) {
+  for (const f of ['seed', 'presetId', 'wallpaperPath', 'matugenPath', 'scheme']) {
     if (cfg[f] !== undefined) {
       if (typeof cfg[f] !== 'string') return null;
       config[f] = cfg[f];
@@ -274,8 +274,11 @@ function registerIpc() {
   const { startWatching, stopWatching } = require(path.join(DIST_ELECTRON, 'fsWatcher.js'));
 
   // ── 以下与 main.ts 顶层直接注册的 handler 一一对应 ──
-  ipcMain.handle('theme:get-css', async () => {
-    const themePath = path.join(os.homedir(), '.config', 'matugen', 'theme.css');
+  ipcMain.handle('theme:get-css', async (_e, customPath) => {
+    // 与 main.ts 同步：指定 Matugen 配置文件时读它，否则回落默认路径
+    const themePath = typeof customPath === 'string' && path.isAbsolute(customPath)
+      ? customPath
+      : path.join(os.homedir(), '.config', 'matugen', 'theme.css');
     try {
       return await fs.promises.readFile(themePath, 'utf-8');
     } catch {

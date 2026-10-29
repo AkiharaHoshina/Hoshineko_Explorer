@@ -13,7 +13,10 @@ interface ObjectWriteEventPayload {
 }
 
 contextBridge.exposeInMainWorld('electron', {
-  getThemeCss: () => ipcRenderer.invoke('theme:get-css'),
+  /** 读取 Matugen 主题 CSS（传 customPath 时读该文件，否则读默认 ~/.config/matugen/theme.css） */
+  getThemeCss: (customPath?: string) => ipcRenderer.invoke('theme:get-css', customPath),
+  /** 加载用户选择的 Matugen 配置文件/目录（css 或颜色 json；目录内自动查找） */
+  loadMatugen: (pickedPath: string) => ipcRenderer.invoke('theme:load-matugen', pickedPath),
   readDmsTheme: () => ipcRenderer.invoke('theme:read-dms'),
   /** 检测系统明暗偏好（跟随系统默认值） */
   detectColorScheme: () => ipcRenderer.invoke('theme:detect-color-scheme'),
@@ -48,6 +51,8 @@ contextBridge.exposeInMainWorld('electron', {
       wallpaperPath?: string;
       /** 壁纸来源动作（'auto' 自动探测 / 'pick' 手动选图） */
       wallpaperSource?: 'auto' | 'pick';
+      /** Matugen 主题实际使用的配置文件路径 */
+      matugenPath?: string;
       scheme?: string;
       contrast?: number;
     } | null;

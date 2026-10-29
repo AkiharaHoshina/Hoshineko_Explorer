@@ -79,7 +79,8 @@ export const ThemeService = {
       }
       case 'matugen': {
         if (!window.electron?.getThemeCss) return null;
-        const css = await window.electron.getThemeCss();
+        // 用户选择的 Matugen 配置文件优先，否则回落传统默认路径
+        const css = await window.electron.getThemeCss(config.matugenPath);
         return css ? parseThemeCssToVars(css) : null;
       }
       }
@@ -170,6 +171,13 @@ export const ThemeService = {
         return null;
       }
       case 'matugen': {
+        if (config.matugenPath && window.electron?.getThemeCss) {
+          const css = await window.electron.getThemeCss(config.matugenPath);
+          if (css) {
+            this.injectCss(css);
+            return null;
+          }
+        }
         await this.loadTheme();
         return null;
       }

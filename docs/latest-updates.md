@@ -1,5 +1,29 @@
 # 更新日志
 
+## v3.0.1035 — 壁纸卡副标题对称 + Matugen 卡改为选择配置文件
+
+- 版本号升至 `3.0.1035`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1035.AppImage` / `HoshinekoFM-3.0.1035-size.AppImage`。
+- **壁纸卡副标题对称**：此前只有「壁纸取色」卡在生效时显示图片路径；现在
+  **谁生效谁显示路径**——自动探测生效时自动卡显示路径、图片卡恢复介绍；
+  手动选图生效时图片卡显示路径、自动卡恢复介绍；切到其他主题两张都恢复介绍。
+- **Matugen 卡改为选择配置文件**：介绍改为「使用 Matugen 配置文件」；点击打开
+  内置选择器（`items` 模式，文件与目录都可选）。选目录时后端按
+  `theme.css → colors.json → dms-colors.json → 任一可解析 *.json` 查找；
+  `.css` 直接使用，颜色 `.json` 自动转成 M3 角色 CSS（兼容
+  `{colors:{dark,light}}` 与 `{dark,light}`、snake_case/camelCase）。
+  成功后副标题显示**实际命中的文件路径**，`ThemeConfig.matugenPath` 贯穿
+  `ThemeService` 与 `theme:get-css`（缺省仍回落 `~/.config/matugen/theme.css`）。
+- **失败兜底**：文件/目录里找不到可用配置、或解析后缺少 dark/light 核心角色 →
+  toast「未找到可用的 Matugen 配置文件，已恢复默认主题」并把主题恢复为**预设紫色**。
+- i18n：`theme.import_matugen_desc` 更新为新文案（12 语言），新增
+  `theme.matugen_invalid`（12 语言）。
+- e2e 117 扩展：两张壁纸卡的副标题对称、Matugen 生效显示路径/换主题恢复、
+  `theme:load-matugen` 的目录命中顺序、颜色 JSON 转换、空目录/不存在/无效 JSON
+  失败；并断言 Matugen 主题真实生效（`--md-sys-color-primary` 取自所选文件）。
+  （测试中发现 harness 的 `theme:get-css` 手工副本未同步 customPath 参数，
+  一并修复。）
+
 ## v3.0.1034 — 修复壁纸取色成功后「自定义图片取色」误亮
 
 - 版本号升至 `3.0.1034`；AppImage 产物名变为

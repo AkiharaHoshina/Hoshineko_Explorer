@@ -21,6 +21,8 @@ export interface ThemeConfig {
    * 旧配置没有该字段 → 视为 `'auto'`。
    */
   wallpaperSource?: 'auto' | 'pick';
+  /** Matugen 主题：用户所选配置文件/目录内解析到的实际文件（v3.0.1035） */
+  matugenPath?: string;
   /** matugen scheme 类型（scheme-rainbow / scheme-tonal-spot 等） */
   scheme?: string;
   /** matugen contrast（-1..1，默认 0） */

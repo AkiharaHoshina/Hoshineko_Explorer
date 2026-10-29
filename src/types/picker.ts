@@ -109,6 +109,8 @@ export interface PickerThemeSnapshot {
     wallpaperPath?: string;
     /** 壁纸来源动作（区分自动探测/手动选图；旧快照无此字段 = auto） */
     wallpaperSource?: 'auto' | 'pick';
+    /** Matugen 主题实际使用的配置文件路径 */
+    matugenPath?: string;
     scheme?: string;
     contrast?: number;
   } | null;

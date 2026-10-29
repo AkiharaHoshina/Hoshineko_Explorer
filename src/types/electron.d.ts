@@ -219,7 +219,13 @@ export type DragClaimResult =
   | { status: 'object' };
 
 export interface IElectronAPI {
-    getThemeCss: () => Promise<string | null>;
+    getThemeCss: (customPath?: string) => Promise<string | null>;
+    /**
+     * 加载用户选择的 Matugen 配置文件/目录（选择器 items 模式可选目录）：
+     * .css 直接使用、.json 颜色表转 CSS；目录内按 theme.css → colors.json →
+     * dms-colors.json → 任一可解析 *.json 顺序查找。失败 success=false。
+     */
+    loadMatugen: (pickedPath: string) => Promise<{ success: boolean; css?: string; path?: string; error?: string }>;
     /** DMS 系统主题信息（scheme / contrast / dark+light 全套角色） */
     readDmsTheme: () => Promise<{ available: boolean; scheme?: string; contrast?: number; colors?: { dark: Record<string, string>; light: Record<string, string> } }>;
     /**
