@@ -46,6 +46,12 @@ interface DashboardProps {
      * 关闭时主页子区域仅作为导航入口；系统与设备子区域不受影响。
      */
     showHomeStorageUsage: boolean;
+    /**
+     * 文件图标实心变体（设置 → 文件 → 外观「实心图标」）：
+     * 固定项与最近访问都是文件/文件夹条目，跟随该设置。
+     * 存储子区域的设备图标不是文件图标，不跟随。
+     */
+    filledIcons: boolean;
 }
 
 /** 仪表盘存储子区域条目：一个目录或设备的存储占用（列表形式） */
@@ -150,7 +156,7 @@ const t = (text: string): string => {
   return (ti as any)(key ?? text);
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onOpenFile, pinnedItems, onPinItem, onPinObject, onMovePinAcross, onRemovePin, onReorderPin, marqueeEnabled, showHomeStorageUsage }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onOpenFile, pinnedItems, onPinItem, onPinObject, onMovePinAcross, onRemovePin, onReorderPin, marqueeEnabled, showHomeStorageUsage, filledIcons }) => {
   /**
    * 对象投影载荷双通道解析（与文件 DnD 同款架构）：HTML5 会话内拖拽
    * 读 dataTransfer MIME；原生拖出（对象行）的 drop 无 MIME（Wayland
@@ -646,6 +652,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onOpenFile, pi
                   <Icon
                     name={item.icon ?? (item.name === 'Home' ? 'home' : item.isDir === false ? 'insert_drive_file' : 'folder')}
                     size={32}
+                    filled={filledIcons}
                   />
                 </div>
                 {marqueeEnabled ? (
@@ -740,7 +747,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onOpenFile, pi
                   title={file.path}
                   onClick={() => onNavigate(file.path)}
                 >
-                  <Icon name={file.isDirectory ? 'folder' : 'article'} size={20} />
+                  <Icon name={file.isDirectory ? 'folder' : 'article'} size={20} filled={filledIcons} />
                   {/* 外层 wrap 作为 flex item 定宽（收缩优先级/上限），
                       内层 MarqueeText 两种模式（跑马灯/省略号）都受其约束——
                       直接以 MarqueeText 为 flex item 时其禁用分支的内联

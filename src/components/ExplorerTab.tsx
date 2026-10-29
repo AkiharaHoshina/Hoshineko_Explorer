@@ -2852,6 +2852,7 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
             onReorderPin={onDashboardReorderPin}
             marqueeEnabled={marqueeEnabled}
             showHomeStorageUsage={showHomeStorageUsage}
+            filledIcons={filledIcons}
           />
         </div>
       ) : isObjectsPath(currentPath) || isObjectSearchPath(currentPath) ? (

@@ -1,5 +1,19 @@
 # 更新日志
 
+## v3.0.1037 — 仪表盘固定项/最近访问图标跟随「实心图标」
+
+- 版本号升至 `3.0.1037`；AppImage 产物名变为
+  `HoshinekoFM-3.0.1037.AppImage` / `HoshinekoFM-3.0.1037-size.AppImage`。
+- **缺陷**：`filledIcons` 只传给了 ExplorerTab，Dashboard 未接收——开启
+  「设置 → 文件 → 外观 → 实心图标」后，仪表盘的固定项与最近访问图标仍是描边；
+  标题旁的 `push_pin`/`hard_drive`/`history` 本来就写死实心，容易误以为已生效。
+- **修复**：Dashboard 新增 `filledIcons` prop（ExplorerTab 透传），固定项与
+  最近访问的 `<Icon>` 传 `filled={filledIcons}`；「添加」瓦片不参与。
+  存储子区域的设备图标（`hard_drive`/`usb`/`smartphone`…）故意不跟随——
+  它们不是文件/文件夹图标。
+- e2e 119（新增）：开/关实心图标两态下，固定项与最近访问的 `md-icon[filled]`
+  数量分别为全部 / 0，存储图标始终不带 filled。
+
 ## v3.0.1036 — 地址栏粘贴文件路径 + Matugen 只认 theme.css + 放宽校验
 
 - 版本号升至 `3.0.1036`；AppImage 产物名变为
