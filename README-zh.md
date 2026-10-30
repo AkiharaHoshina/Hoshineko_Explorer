@@ -1,6 +1,6 @@
 [English](README.md)
 <p align="center">
-  <img src="assets/Screenshot of Hoshineko.png" alt="Hoshineko" width="28%">
+  <img src="assets/Screenshot of Hoshineko.png" alt="Hoshineko">
 </p>
 
 # Hoshineko Explorer
@@ -8,7 +8,7 @@
 - "进阶的Material3设计的文件管理器"
 
 <p align="center">
-  <img src="Screenshot_for_HoshinekoFM1.png" alt="Hoshineko">
+  <img src="assets/Screenshot of Hoshineko.png" alt="Hoshineko">
 </p>
 
 Hoshineko Explorer一款基于 Material 3 设计语言、Electron 和 React 框架构建的现代文件管理器。
