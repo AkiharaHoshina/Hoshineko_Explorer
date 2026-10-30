@@ -655,30 +655,36 @@ export const ThemeSettings: React.FC = () => {
         </div>
       </div>
 
-      {/* 骄傲主题（v3.0.1016）：只影响左侧栏当前激活条目的底色，其余按主题渲染。
-          分区标题保持「骄傲主题」，设置项名称另用 settings.pride_theme（v3.0.1029） */}
-      <div className="theme-color-section">
-        <div className="theme-color-section-header">{t('settings.pride_section')}</div>
-        <SettingsSelectRow
-          icon="diversity_3"
-          label={t('settings.pride_theme')}
-          sub={t('settings.pride_theme_desc')}
-          rowId="display-pride-theme"
-          value={s.prideAccent ?? ''}
-          onChange={(v) => s.setPrideAccent(v ? v : null)}
-          options={[
-            { value: '', label: t('pride.none') },
-            ...PRIDE_FLAGS.map((f) => ({ value: f.id, label: t(`pride.flag.${f.id}`) })),
-          ]}
-        />
-      </div>
-
       <ColorPickerDialog
         open={pickerOpen}
         initialColor={s.themeConfig?.seed ?? '#6750A4'}
         onClose={handlePickerClose}
       />
     </>
+  );
+};
+
+// ── 实验设置（settings://experimental，v3.0.1039） ──
+// 无常规入口：设置根页不显示卡片，只能经地址栏/固定项进入。
+// 目前收纳骄傲主题（只影响左侧栏按钮着色的实验功能）。
+export const ExperimentalSettings: React.FC = () => {
+  const s = useSettings();
+  return (
+    <div className="theme-color-section">
+      <div className="theme-color-section-header">{t('settings.pride_section')}</div>
+      <SettingsSelectRow
+        icon="diversity_3"
+        label={t('settings.pride_theme')}
+        sub={t('settings.pride_theme_desc')}
+        rowId="display-pride-theme"
+        value={s.prideAccent ?? ''}
+        onChange={(v) => s.setPrideAccent(v ? v : null)}
+        options={[
+          { value: '', label: t('pride.none') },
+          ...PRIDE_FLAGS.map((f) => ({ value: f.id, label: t(`pride.flag.${f.id}`) })),
+        ]}
+      />
+    </div>
   );
 };
 

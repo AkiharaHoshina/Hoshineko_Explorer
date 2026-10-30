@@ -60,10 +60,23 @@ const h = require('./harness.cjs');
     const TG = ['#5BCEFA', '#F5A9B8', '#FFFFFF'];
     const PRIDE = ['#E40303', '#FF8C00', '#FFED00', '#008026', '#004DFF', '#750787'];
 
+    /** 打开实验设置页（settings://experimental 无常规入口，只能地址栏进入） */
+    const openExperimental = async () => {
+      await h.clickEl(win, '.omnibar-trigger');
+      await h.waitFor(win, `!!document.querySelector('.omnibar.mode-edit .omnibar-input')`);
+      await h.setReactInput(win, '.omnibar.mode-edit .omnibar-input', 'settings://experimental');
+      await h.sleep(150);
+      await h.js(win, `(() => {
+        const el = document.querySelector('.omnibar.mode-edit .omnibar-input');
+        el?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        return true;
+      })()`, true);
+      await h.waitFor(win, `!!document.querySelector('[data-settings-row="display-pride-theme"]')`, { timeout: 8000 });
+    };
+
     // ── 1) 设置页：预设无旗帜；骄傲主题行选项齐全 ──
     await setPride('transgender');
-    await h.openSettingsPage(win, /主题和显示|Theme & Display/);
-    await h.waitFor(win, `!!document.querySelector('[data-settings-row="display-pride-theme"]')`, { timeout: 8000 });
+    await openExperimental();
     const ui = (await h.js(win, `(() => {
       const row = document.querySelector('[data-settings-row="display-pride-theme"]');
       const sel = row?.querySelector('md-outlined-select');
@@ -154,8 +167,7 @@ const h = require('./harness.cjs');
     winCold.destroy();
 
     // ── 5) 换旗即时刷新：只改设置，不点侧边栏 ──
-    await h.openSettingsPage(win, /主题和显示|Theme & Display/);
-    await h.waitFor(win, `!!document.querySelector('[data-settings-row="display-pride-theme"]')`, { timeout: 8000 });
+    await openExperimental();
     await h.sleep(400);
     const beforeSwitch = await prideState();
     h.assert.strictEqual(beforeSwitch.flag, 'transgender', '进设置页后当前条目仍是跨性别配色');

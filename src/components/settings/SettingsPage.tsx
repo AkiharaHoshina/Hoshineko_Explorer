@@ -4,6 +4,7 @@ import { t } from '../../i18n';
 import { ContextMenu } from '../ContextMenu';
 import type { ContextMenuItem } from '../ContextMenu';
 import {
+  findSettingsCategory,
   isSettingsPath,
   parseSettingsPath,
   SETTINGS_CATEGORIES,
@@ -25,6 +26,7 @@ import {
   I18nSettings,
   DefaultsSettings,
   AboutSettings,
+  ExperimentalSettings,
 } from './SettingsCategoryPages';
 // 设置页复用对象面板的 .object-panel-header/.object-panel-title/
 // .object-search-* 类；ObjectPanel 现在是懒加载组件，它的 CSS 只在对象页
@@ -48,7 +50,7 @@ interface SettingsPageProps {
 
 /** 分类页标题（根 = null；二级页 = 子页标题） */
 function pageTitleOf(parsed: ParsedSettingsPath): string {
-  const cat = SETTINGS_CATEGORIES.find((c) => c.id === parsed.cat);
+  const cat = findSettingsCategory(parsed.cat);
   if (!cat) return t('settings.title');
   return t(cat.labelKey);
 }
@@ -457,6 +459,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ path, isActive, onNa
     case 'i18n': return <I18nSettings />;
     case 'defaultrecovery': return <DefaultsSettings />;
     case 'about': return <AboutSettings />;
+    case 'experimental': return <ExperimentalSettings />;
     default: return null;
     }
   };

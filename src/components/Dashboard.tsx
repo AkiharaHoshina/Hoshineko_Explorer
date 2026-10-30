@@ -47,9 +47,9 @@ interface DashboardProps {
      */
     showHomeStorageUsage: boolean;
     /**
-     * 文件图标实心变体（设置 → 文件 → 外观「实心图标」）：
-     * 固定项与最近访问都是文件/文件夹条目，跟随该设置。
-     * 存储子区域的设备图标不是文件图标，不跟随。
+     * 图标实心变体（设置 → 文件 → 外观「实心图标」）：
+     * 固定项、最近访问与存储子区域条目图标统一跟随（v3.0.1039 用户定案，
+     * 此前存储区被排除，观感不一致）。
      */
     filledIcons: boolean;
 }
@@ -587,7 +587,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onOpenFile, pi
                   }}
                   title={card.subtitle ?? card.path}
                 >
-                  <Icon name={card.icon} className="storage-sub-icon" />
+                  <Icon name={card.icon} className="storage-sub-icon" filled={filledIcons} />
                   <div className="storage-sub-body">
                     <div className="storage-sub-top">
                       <span className="storage-sub-label">{ti(card.label)}</span>

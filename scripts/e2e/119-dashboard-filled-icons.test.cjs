@@ -3,8 +3,9 @@
  *
  * 缺陷：Dashboard 组件未接收 filledIcons，固定项与最近访问始终渲染描边
  * 图标；开启「设置 → 文件 → 外观 → 实心图标」后它们仍是空心。
- * 修复：Dashboard 新增 filledIcons prop（ExplorerTab 透传），固定项与
- * 最近访问的 <md-icon> 带 filled 属性；存储子区域的设备图标不跟随。
+ * 修复：Dashboard 新增 filledIcons prop（ExplorerTab 透传），固定项、
+ * 最近访问与存储子区域条目的 <md-icon> 都带 filled 属性（v3.0.1039 起
+ * 存储区也跟随，此前被排除）。
  */
 const h = require('./harness.cjs');
 
@@ -57,13 +58,15 @@ const h = require('./harness.cjs');
     await seed(true);
     await h.clickPlace(win, 'dashboard');
     await h.waitFor(win, `!!document.querySelector('.pinned-icon md-icon')`, { timeout: 8000 });
+    await h.waitFor(win, `!!document.querySelector('.storage-sub-icon')`, { timeout: 15000 });
     await h.sleep(400);
     const on = await iconState();
     h.assert.strictEqual(on.pinned, pinned.length, `固定项图标数量应为 ${pinned.length}（实际 ${on.pinned}）`);
     h.assert.strictEqual(on.pinnedFilled, on.pinned, '开启实心后固定项图标应全部为实心');
     h.assert.ok(on.recent > 0, '最近访问应有图标');
     h.assert.strictEqual(on.recentFilled, on.recent, '开启实心后最近访问图标应全部为实心');
-    h.assert.strictEqual(on.storageFilled, 0, '存储子区域设备图标不跟随实心设置');
+    h.assert.ok(on.storage > 0, '存储子区域应有图标');
+    h.assert.strictEqual(on.storageFilled, on.storage, '开启实心后存储子区域图标也应全部为实心');
 
     // ── 2) 关闭实心图标：恢复描边 ──
     await seed(false);
@@ -73,6 +76,7 @@ const h = require('./harness.cjs');
     const off = await iconState();
     h.assert.strictEqual(off.pinnedFilled, 0, '关闭实心后固定项图标应全部为描边');
     h.assert.strictEqual(off.recentFilled, 0, '关闭实心后最近访问图标应全部为描边');
+    h.assert.strictEqual(off.storageFilled, 0, '关闭实心后存储子区域图标应全部为描边');
   });
 
   h.finish();

@@ -572,6 +572,16 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
           setBreadcrumbCtxMenu(null);
         },
       },
+      // v3.0.1039：设置页同样可经通用跳转菜单直达（实验设置无卡片入口，
+      // 依赖地址栏/固定项/本菜单）
+      {
+        label: t("breadcrumbs.go_to_settings"),
+        icon: "settings",
+        action: () => {
+          onNavigate("settings://");
+          setBreadcrumbCtxMenu(null);
+        },
+      },
     );
 
     return (
@@ -695,6 +705,7 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
         <Chip
           title={t('settings.title')}
           onClick={() => onNavigate('settings://')}
+          onContextMenu={(e) => handleBreadcrumbContextMenu(e)}
           className="breadcrumb-chip breadcrumb-settings-chip"
         >
           <Icon name="settings" slot="icon" />

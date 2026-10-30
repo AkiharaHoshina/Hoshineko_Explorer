@@ -38,6 +38,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
 ];
 
 /**
+ * 无常规入口的可路由分类（v3.0.1039）：设置根页**不渲染卡片**，只能经
+ * 地址栏 `settings://<id>`、固定项或搜索历史进入（实验功能放这里）。
+ * 解析/面包屑/标题都会识别，但不出现在卡片网格与设置搜索索引里。
+ */
+export const EXTRA_SETTINGS_CATEGORIES: SettingsCategory[] = [
+  { id: 'experimental', labelKey: 'settings.cat_experimental', icon: 'science' },
+];
+
+/** 按 id 查分类（含无卡片的实验分类） */
+export function findSettingsCategory(id: string | null): SettingsCategory | undefined {
+  if (!id) return undefined;
+  return SETTINGS_CATEGORIES.find((c) => c.id === id)
+    ?? EXTRA_SETTINGS_CATEGORIES.find((c) => c.id === id);
+}
+
+/**
  * 已合并分类的旧 id → 新 id（v3.0.1007）：
  * - dashboard（仪表盘）→ navigation
  * - objects（对象面板）→ navigation（设置项已移入导航页分区）
@@ -114,7 +130,7 @@ export function parseSettingsPath(p: string): ParsedSettingsPath | null {
   }
   if (segs.length === 0) return { cat: null, sub: null, focus };
   const segCat = LEGACY_CAT_ALIASES[segs[0]] ?? segs[0];
-  const cat = SETTINGS_CATEGORIES.find((c) => c.id === segCat);
+  const cat = findSettingsCategory(segCat);
   if (!cat) return { cat: null, sub: null, focus };
   if (segs.length === 1) return { cat: cat.id, sub: null, focus };
   // 二级子页已全部并入分类页：多出的路径段一律忽略（旧链接重定向）
@@ -151,6 +167,6 @@ export function settingsCategoryPath(cat: string): string {
 export function settingsPathTitle(p: string): string {
   const parsed = parseSettingsPath(p);
   if (!parsed || parsed.cat === null) return t('settings.title');
-  const cat = SETTINGS_CATEGORIES.find((c) => c.id === parsed.cat);
+  const cat = findSettingsCategory(parsed.cat);
   return cat ? `${t('settings.title')} · ${t(cat.labelKey)}` : t('settings.title');
 }
