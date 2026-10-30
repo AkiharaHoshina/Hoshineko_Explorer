@@ -1,6 +1,6 @@
 [English](README.md)
 <p align="center">
-  <img src="HoshinekoAkihara.png" alt="Hoshineko" width="28%">
+  <img src="assets/Screenshot of Hoshineko.png" alt="Hoshineko" width="28%">
 </p>
 
 # Hoshineko Explorer
