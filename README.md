@@ -8,7 +8,7 @@
 - "An advanced Material 3 designed file manager"
 
 <p align="center">
-  <img src="assets/Screenshot of Hoshineko" alt="Hoshineko">
+  <img src="assets/Screenshot of Hoshineko.png" alt="Hoshineko">
 </p>
 
 Hoshineko Explorer is a modern file manager built on the Material 3 design language, Electron, and React frameworks.
