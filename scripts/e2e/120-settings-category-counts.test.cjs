@@ -11,7 +11,7 @@ const h = require('./harness.cjs');
 /** 各分类期望的项目数（= 搜索索引里该分类的行数；about 固定 2） */
 const EXPECTED = {
   navigation: 8,
-  files: 12,
+  files: 14,
   display: 5,
   search: 4,
   portal: 3,

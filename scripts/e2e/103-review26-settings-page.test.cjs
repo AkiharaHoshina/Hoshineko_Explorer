@@ -53,8 +53,14 @@ const { ipcMain } = require('electron');
     h.assert.strictEqual(settingsGap, objectsGap, `设置页与对象页「地址栏→标题」间隔应完全一致（设置 ${settingsGap}px / 对象 ${objectsGap}px）`);
     // 回设置页继续后续断言
     await h.openSettingsPage(win);
-    // 根页无返回上级键
-    h.assert.ok((await h.js(win, `!document.querySelector('[data-kb-zone="topbar-up"]')`)).value, '设置根页不应有返回上级键');
+    // 根页返回上级键存在但置灰（v3.0.1040：按钮由设置控制显隐，无上级时置灰）
+    const rootUp = (await h.js(win, `(() => {
+      const z = document.querySelector('[data-kb-zone="topbar-up"]');
+      const b = z?.querySelector('md-icon-button');
+      return { exists: !!z, disabled: b?.hasAttribute('disabled') ?? null };
+    })()`)).value;
+    h.assert.ok(rootUp.exists, '设置根页应有返回上级键（置灰态）');
+    h.assert.strictEqual(rootUp.disabled, true, '设置根页返回上级应置灰');
     // 标签页/窗口标题 = 设置
     h.assert.strictEqual((await h.js(win, `document.querySelector('.tab-item.active .tab-title')?.textContent ?? ''`)).value, '设置', '根页标签标题应为「设置」');
 
@@ -274,12 +280,14 @@ const { ipcMain } = require('electron');
       if (!a) return 'none';
       return a.closest('[data-kb-zone]')?.getAttribute('data-kb-zone') ?? 'other';
     })()`);
-    for (let i = 0; i < 12; i++) {
+    // v3.0.1040：设置根页多了一个顶栏返回站（按钮置灰仍在 Tab 序），
+    // 循环上限放宽
+    for (let i = 0; i < 24; i++) {
       await h.key(win, 'Tab');
       await h.sleep(120);
       const z = (await zoneOf()).value;
       if (z === 'settings') break;
-      if (i === 11) throw new Error(`未到达 settings 站（最后分区 ${z}）`);
+      if (i === 23) throw new Error(`未到达 settings 站（最后分区 ${z}）`);
     }
     h.assert.ok((await h.js(win, `document.activeElement?.classList?.contains('settings-category-card') ?? false`)).value, 'settings 站进站应聚焦首卡');
     // 方向键网格移动 → 焦点移动

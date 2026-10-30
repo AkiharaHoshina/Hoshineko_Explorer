@@ -1,7 +1,7 @@
 {
   "name": "hoshineko-fm",
   "private": true,
-  "version": "3.0.1039",
+  "version": "3.0.1040",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {

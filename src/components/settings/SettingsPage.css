@@ -461,6 +461,13 @@
   width: 128px;
 }
 
+/* v3.0.1040：与上方下拉框（.settings-select，MD 内部 min-width 210px）
+ * 同宽——浏览记录上限行 */
+.settings-input-num--match-select {
+  width: 210px;
+  min-width: 210px;
+}
+
 /* review 29.1：系统集成行卸载/重装双按钮间隙 */
 .settings-row > md-outlined-button + md-outlined-button {
   margin-left: 8px;
@@ -512,4 +519,27 @@
 }
 .settings-view-wrapper > .search-recent + .settings-page .object-panel-header {
   padding-top: 16px;
+}
+
+/* 多选设置行（v3.0.1040）：一组圆点复选框，右侧对齐 */
+.settings-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  justify-content: flex-end;
+}
+
+.settings-checkbox-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-checkbox-option:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: -2px;
 }

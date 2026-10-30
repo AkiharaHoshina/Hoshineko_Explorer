@@ -45,6 +45,8 @@ const ruUA = {
 
   // ── 右键菜单 ──
   'context_menu.open': 'Открыть',
+  'context_menu.open_new_tab': 'Открыть в новой вкладке',
+  'context_menu.open_new_window': 'Открыть в новом окне',
   'context_menu.open_with': 'Открыть с помощью...',
   'context_menu.open_terminal': 'Открыть во встроенном терминале',
   'context_menu.open_in_terminal': 'Открыть в терминале по умолчанию',
@@ -247,6 +249,12 @@ const ruUA = {
   'settings.icon_size': 'Размер значков',
   'settings.ui_scale': 'Масштаб интерфейса',
   'settings.filled_icons': 'Залитые значки',
+  'settings.back_buttons': 'Кнопки «Назад»',
+  'settings.back_buttons_desc': 'Выберите, какие кнопки возврата показывать слева от адресной строки',
+  'settings.back_button_up': 'На уровень выше',
+  'settings.back_button_undo': 'Отменить переход',
+  'settings.back_history_limit': 'Лимит истории переходов',
+  'settings.back_history_limit_desc': 'Сколько записей истории хранится в памяти для каждой вкладки (5–30; очищается при закрытии вкладки)',
   'settings.sort_auto_collapse': 'Автосворачивание кнопок адресной строки',
   'settings.preview_collapse': 'Свернуть предпросмотр',
   'settings.preview_expand': 'Развернуть предпросмотр',

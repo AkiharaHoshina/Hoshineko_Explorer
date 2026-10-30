@@ -356,7 +356,7 @@ ipcMain.handle('clipboard:write-files', (_event, paths: unknown) => {
  */
 export function registerWindowHandlers(
   getWindows: () => BrowserWindow[],
-  createNewWindow?: () => void,
+  createNewWindow?: (targetPath?: string) => void,
 ) {
   /**
    * 界面缩放（整页缩放，Electron zoom factor）。
@@ -489,8 +489,13 @@ export function registerWindowHandlers(
   // createWindow 工厂（共享同一主进程后端，无单实例锁语义——
   // 锁只拦截第二次进程启动，这里始终在同一进程内开窗）
   if (createNewWindow) {
-    ipcMain.handle('window:new', () => {
-      createNewWindow();
+    // v3.0.1040：「在新窗口打开」可携带目标目录（绝对路径）——
+    // 新窗口以该目录为启动路径，浏览历史自然为空
+    ipcMain.handle('window:new', (_event, targetPath?: unknown) => {
+      const target = typeof targetPath === 'string' && path.isAbsolute(targetPath)
+        ? targetPath
+        : undefined;
+      createNewWindow(target);
     });
   }
 

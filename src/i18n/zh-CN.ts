@@ -19,6 +19,8 @@ const zhCN = {
 
   // ── 右键菜单 ──
   'context_menu.open': '打开',
+  'context_menu.open_new_tab': '在新标签页打开',
+  'context_menu.open_new_window': '在新窗口打开',
   'context_menu.open_with': '打开方式...',
   'context_menu.open_terminal': '在内置终端打开',
   'context_menu.open_in_terminal': '在默认终端中打开',
@@ -205,6 +207,12 @@ const zhCN = {
   'settings.icon_size': '图标大小',
   'settings.ui_scale': '界面缩放',
   'settings.filled_icons': '实心图标',
+  'settings.back_buttons': '返回按钮设置',
+  'settings.back_buttons_desc': '选择在地址栏左侧显示哪些返回按钮',
+  'settings.back_button_up': '返回上级',
+  'settings.back_button_undo': '撤回',
+  'settings.back_history_limit': '浏览记录保存上限',
+  'settings.back_history_limit_desc': '每个标签页在内存中保留的浏览记录条数（5–30，关闭标签页后清除）',
   'settings.sort_auto_collapse': '地址栏按钮自动收缩',
   'settings.preview_collapse': '收起预览',
   'settings.preview_expand': '展开预览',

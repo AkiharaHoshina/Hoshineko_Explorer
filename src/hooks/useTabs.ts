@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { t } from '../i18n';
 
 interface TabState {
@@ -12,6 +12,12 @@ interface TabState {
 export function useTabs() {
   const [tabs, setTabs] = useState<TabState[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>("");
+  /** tabs 最新值引用：回调里读它来避免「在 setTabs updater 内再 setState」
+   *  （v3.0.1040：该写法在 React 19 并发渲染下可能丢失——新窗口带启动路径
+   *  打开时表现为「标签页已创建但不激活、内容空白」的历史症状） */
+  const tabsRef = useRef(tabs);
+  // eslint-disable-next-line react-hooks/refs -- 渲染期同步 ref 供稳定回调读取
+  tabsRef.current = tabs;
 
   const handleAddTab = useCallback((path?: string) => {
     const newTabId = Date.now().toString();
@@ -26,20 +32,12 @@ export function useTabs() {
     setActiveTabId(newTabId);
   }, []);
 
-  const handleCloseTab = useCallback(
-    (id: string) => {
-      setTabs((prevTabs) => {
-        const newTabs = prevTabs.filter((t) => t.id !== id);
-        if (newTabs.length > 0) {
-          setActiveTabId(newTabs[newTabs.length - 1].id);
-        } else {
-          setActiveTabId("");
-        }
-        return newTabs;
-      });
-    },
-    [],
-  );
+  const handleCloseTab = useCallback((id: string) => {
+    // 与 handleSidebarNavigate 同因：activeTabId 在 updater 外决定
+    const newTabs = tabsRef.current.filter((t) => t.id !== id);
+    setTabs(newTabs);
+    setActiveTabId(newTabs.length > 0 ? newTabs[newTabs.length - 1].id : "");
+  }, []);
 
   const handleTabPathUpdate = useCallback((id: string, path: string) => {
     // 虚拟路径（仪表板/回收站/搜索态）整串作为标题，由 TabBar 的
@@ -62,26 +60,24 @@ export function useTabs() {
 
   const handleSidebarNavigate = useCallback(
     (path: string, selectFileName?: string) => {
-      setTabs((prev) => {
-        if (prev.length === 0) {
-          const newTabId = Date.now().toString();
-          const newTab: TabState = {
-            id: newTabId,
-            title: t("tab.new_tab"),
-            path,
-            version: 0,
-            pendingSelectFile: selectFileName,
-          };
-          setActiveTabId(newTabId);
-          return [newTab];
-        }
-        return prev.map((t) => {
-          if (t.id === activeTabId) {
-            return { ...t, path, pendingSelectFile: selectFileName };
-          }
-          return t;
-        });
-      });
+      const prev = tabsRef.current;
+      if (prev.length === 0) {
+        // 首个标签页：id/激活状态在 setTabs 之外决定（见 tabsRef 注释）
+        const newTabId = Date.now().toString();
+        const newTab: TabState = {
+          id: newTabId,
+          title: t("tab.new_tab"),
+          path,
+          version: 0,
+          pendingSelectFile: selectFileName,
+        };
+        setTabs([newTab]);
+        setActiveTabId(newTabId);
+        return;
+      }
+      setTabs((cur) => cur.map((tab) => (
+        tab.id === activeTabId ? { ...tab, path, pendingSelectFile: selectFileName } : tab
+      )));
     },
     [activeTabId],
   );

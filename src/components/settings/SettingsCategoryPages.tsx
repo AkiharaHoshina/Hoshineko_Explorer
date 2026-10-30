@@ -14,8 +14,8 @@ import { THEME_PRESETS, type ThemeConfig } from '../../types/theme';
 import { parseThemeCssToVars } from '../../services/themeEngine';
 import { PRIDE_FLAGS } from '../../types/pride';
 import { showToast } from '../../utils/toast';
-import { useSettings } from '../../contexts/SettingsContext';
-import { SettingsSection, SettingsRow, SettingsSelectRow, SettingsSwitchRow, ThreeStateSwitchRow } from './SettingsShared';
+import { useSettings, BACK_HISTORY_LIMIT_MAX, BACK_HISTORY_LIMIT_MIN, type BackButtonKind } from '../../contexts/SettingsContext';
+import { SettingsSection, SettingsRow, SettingsSelectRow, SettingsSwitchRow, SettingsCheckboxGroupRow, ThreeStateSwitchRow } from './SettingsShared';
 /** 贡献者头像（仓库根 assets/ 资源经 Vite 导入；关于页圆形按钮内铺满显示） */
 import hoshinaAvatar from '../../../assets/hoshina.jpg';
 import sbchildAvatar from '../../../assets/sbchild.jpg';
@@ -107,6 +107,54 @@ const WheelSensitivityRow: React.FC = () => {
 };
 
 // ── 文件（settings://files） ──
+
+/**
+ * 「浏览记录保存上限」输入行（v3.0.1040）：只接受 5–30 的整数。
+ * 输入即过滤（非数字不写入草稿的提交路径），合法值立即生效；
+ * 非法/越界值在失焦或回车（change）时回退到上一个有效值。
+ */
+const BackHistoryLimitRow: React.FC = () => {
+  const s = useSettings();
+  const [draft, setDraft] = useState(String(s.backHistoryLimit));
+  // 外部值变化（恢复默认/跨窗口同步）时同步草稿
+  useEffect(() => {
+    setDraft(String(s.backHistoryLimit)); // eslint-disable-line react-hooks/set-state-in-effect -- 外部设置同步
+  }, [s.backHistoryLimit]);
+
+  /** 提交合法值；返回是否合法 */
+  const commit = (raw: string): boolean => {
+    const n = Number(raw);
+    if (!/^\d+$/.test(raw) || n < BACK_HISTORY_LIMIT_MIN || n > BACK_HISTORY_LIMIT_MAX) return false;
+    if (n !== s.backHistoryLimit) s.setBackHistoryLimit(n);
+    return true;
+  };
+
+  return (
+    <SettingsRow
+      icon="history"
+      label={t('settings.back_history_limit')}
+      rowId="files-back-history-limit"
+      sub={t('settings.back_history_limit_desc')}
+    >
+      <OutlinedTextField
+        className="settings-input-num settings-input-num--match-select"
+        value={draft}
+        aria-label={t('settings.back_history_limit')}
+        onInput={(e) => {
+          const cleaned = (e.target as HTMLInputElement).value.replace(/[^\d]/g, '');
+          setDraft(cleaned);
+          commit(cleaned); // 合法立即生效；非法只保留草稿，等待失焦回退
+        }}
+        onBlur={() => {
+          if (!commit(draft)) setDraft(String(s.backHistoryLimit));
+        }}
+        onChange={() => {
+          if (!commit(draft)) setDraft(String(s.backHistoryLimit));
+        }}
+      />
+    </SettingsRow>
+  );
+};
 
 export const FilesSettings: React.FC = () => {
   const s = useSettings();
@@ -236,6 +284,20 @@ export const FilesSettings: React.FC = () => {
           value={s.sortControlsAutoCollapse}
           onChange={s.setSortControlsAutoCollapse}
         />
+
+        {/* v3.0.1040：返回按钮显示项（多选，默认仅「返回上级」） */}
+        <SettingsCheckboxGroupRow
+          icon="arrow_upward"
+          label={t('settings.back_buttons')}
+          sub={t('settings.back_buttons_desc')}
+          rowId="files-back-buttons"
+          value={s.backButtons}
+          onChange={(v) => s.setBackButtons(v as BackButtonKind[])}
+          options={[
+            { value: 'up', label: t('settings.back_button_up') },
+            { value: 'undo', label: t('settings.back_button_undo') },
+          ]}
+        />
       </SettingsSection>
 
       <SettingsSection title={t('settings.behavior')}>
@@ -252,6 +314,9 @@ export const FilesSettings: React.FC = () => {
             { value: 'move', label: t('settings.drag_action_move') },
           ]}
         />
+
+        {/* v3.0.1040：每标签页浏览记录上限（仅内存，关标签页即清） */}
+        <BackHistoryLimitRow />
 
         <SettingsRow
           icon="tab"

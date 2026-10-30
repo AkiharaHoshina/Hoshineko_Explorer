@@ -44,6 +44,8 @@ const windows = new Set<BrowserWindow>();
 
 /** 每个窗口的启动路径（由启动参数解析，键为窗口实例） */
 const startupPathByWindow = new WeakMap<BrowserWindow, string | null>();
+/** 启动路径解析 Promise（get-startup-request 在解析完成前等待它） */
+const startupPathPromiseByWindow = new WeakMap<BrowserWindow, Promise<string | null>>();
 
 /** 选择器窗口的配置（键为窗口实例；普通窗口无条目） */
 const pickerConfigByWindow = new WeakMap<BrowserWindow, PickerConfig>();
@@ -514,9 +516,13 @@ async function createWindow(
     startupSelectByWindow.set(win, options.startupSelect);
   }
 
-  // 窗口专属的启动路径（异步解析，保证渲染进程调用 get-startup-path 时已就绪；
-  // 解析期间窗口已入集合，不影响 second-instance 的窗口定位）
-  void resolveStartupPath(startupArgs).then((startupPath) => {
+  // 窗口专属的启动路径：异步解析，并保留 Promise——渲染进程若在解析完成
+  // 前就调用 get-startup-request（新窗口打开很快时可能发生），处理器会
+  // await 该 Promise，而不是返回 null 让渲染进程误走 loadHome（历史症状：
+  // 带路径的新窗口“标签页已建但不激活/内容空白”）
+  const startupPathPromise = resolveStartupPath(startupArgs);
+  startupPathPromiseByWindow.set(win, startupPathPromise);
+  void startupPathPromise.then((startupPath) => {
     if (!win.isDestroyed()) {
       startupPathByWindow.set(win, startupPath);
     }
@@ -866,19 +872,30 @@ ipcMain.handle('fs:unwatch-dir', (event, dir: string) => {
 });
 
 // 启动路径按发起请求的窗口返回
-ipcMain.handle('app:get-startup-path', (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  return win ? (startupPathByWindow.get(win) ?? null) : null;
-});
+/** 取窗口启动路径：尚未解析完成时等待解析 Promise（避免竞态返回 null） */
+async function getStartupPathFor(win: BrowserWindow | null): Promise<string | null> {
+  if (!win) return null;
+  if (!startupPathByWindow.has(win)) {
+    const pending = startupPathPromiseByWindow.get(win);
+    if (pending) {
+      const resolved = await pending;
+      if (!win.isDestroyed()) startupPathByWindow.set(win, resolved);
+    }
+  }
+  return win.isDestroyed() ? null : (startupPathByWindow.get(win) ?? null);
+}
+
+ipcMain.handle('app:get-startup-path', (event) =>
+  getStartupPathFor(BrowserWindow.fromWebContents(event.sender)));
 
 // 启动请求（路径 + 定位/属性提示）按发起请求的窗口返回：
 // FileManager1 ShowItems/ShowItemProperties 经此让渲染进程打开目录后
 // 选中条目（必要时弹属性对话框）
-ipcMain.handle('app:get-startup-request', (event) => {
+ipcMain.handle('app:get-startup-request', async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const select = win ? startupSelectByWindow.get(win) : undefined;
   return {
-    startPath: win ? (startupPathByWindow.get(win) ?? null) : null,
+    startPath: await getStartupPathFor(win),
     selectFileName: select?.fileName,
     openProperties: select?.openProperties ?? false,
   };
@@ -1049,8 +1066,9 @@ const releaseDevicePins = async (mountpoints: string[]) => {
   }
 };
 registerSystemHandlers(reRegisterBackends, reRegisterBackends, releaseDevicePins);
-registerWindowHandlers(getWindows, () => {
-  void createWindow();
+registerWindowHandlers(getWindows, (targetPath) => {
+  // 携带目标目录时作为窗口启动路径（新窗口浏览历史为空，见 v3.0.1040）
+  void createWindow(targetPath ? ['hoshinekofm', targetPath] : process.argv);
 });
 registerThemeHandlers();
 registerPickerHandlers((config, parent) =>

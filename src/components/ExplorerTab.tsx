@@ -35,6 +35,8 @@ import { useTopBarWrap } from '../hooks/useTopBarWrap';
 import { useAutoSortCollapse } from '../hooks/useAutoSortCollapse';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useDrag } from '../contexts/DragContext';
+import { BACK_HISTORY_LIMIT_MAX, BACK_HISTORY_LIMIT_MIN, type BackButtonKind } from '../contexts/SettingsContext';
+import { canNavigateUp } from '../utils/navUp';
 import { t } from '../i18n';
 import { extractDropPaths, samePathSet } from '../utils/dragDrop';
 import { shouldSuppressDrop } from '../utils/nativeDragTracker';
@@ -135,6 +137,10 @@ interface ExplorerTabProps {
      * 忽略 Shift 修饰键；跨应用拖放不走此设置。
      */
     dragFileAction: 'ask' | 'copy' | 'move';
+    /** 返回按钮显示项（多选：'up' 返回上级 / 'undo' 撤回） */
+    backButtons: BackButtonKind[];
+    /** 每标签页浏览记录上限（5–30，仅内存） */
+    backHistoryLimit: number;
     showHiddenFiles: boolean;
     iconSize: number;
     viewMode: 'grid' | 'list';
@@ -283,8 +289,48 @@ interface ExplorerTabProps {
     terminalOpen?: boolean;
 }
 
-export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onContextMenu, onBgMenuItems, onOpenWithFile, onPropertiesFile, onOpenTerminalAt, onRevealFile, onCreateDialog, onConflictDialog, onConfirmDialog, onDragAction, dragFileAction, showHiddenFiles, iconSize, viewMode, filledIcons, sortBy, sortOrder, groupingEnabled, searchGroupByDir, searchLimit, searchTimeout, onSortByChange, onSortOrderChange, onGroupingToggle, onViewModeChange, sortControlsCollapsed, sortControlsAutoCollapse, onSortControlsCollapsedChange, sparklineWindowSeconds, refreshSignal, scrollToFileName, onScrollToComplete, onMountDevice, onUnmountDevice, onEjectDevice, onTerminateProcess, onNiceProcess, onUnlockPrivileged, onPinObject, onPinSettings, onSearchContextMenu, onBatchTerminate, onBatchNice, objectClassOrder, onObjectClassOrderChange, alertTempC, alertDiskPct, objectSearchHistory, onObjectSearchRecord, onObjectSearchHistoryClear, fileSearchHistory, onFileSearchRecord, onFileSearchHistoryClear, settingsSearchHistory, onSettingsSearchRecord, onSettingsSearchHistoryClear, searchRecentCount, onNetworkToggle, marqueeEnabled, pendingDrop, onPendingDropHandled, dashboardPinned, onDashboardPinItem, onDashboardRemovePin, onDashboardReorderPin, onDashboardPinObject, onMovePinAcross, showHomeStorageUsage, filePreviewEnabled, previewWidth, onPreviewWidthChange, pendingPropertiesPath, onPropertiesComplete, terminalOpen = false }: ExplorerTabProps) {
+export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onContextMenu, onBgMenuItems, onOpenWithFile, onPropertiesFile, onOpenTerminalAt, onRevealFile, onCreateDialog, onConflictDialog, onConfirmDialog, onDragAction, dragFileAction, backButtons, backHistoryLimit, showHiddenFiles, iconSize, viewMode, filledIcons, sortBy, sortOrder, groupingEnabled, searchGroupByDir, searchLimit, searchTimeout, onSortByChange, onSortOrderChange, onGroupingToggle, onViewModeChange, sortControlsCollapsed, sortControlsAutoCollapse, onSortControlsCollapsedChange, sparklineWindowSeconds, refreshSignal, scrollToFileName, onScrollToComplete, onMountDevice, onUnmountDevice, onEjectDevice, onTerminateProcess, onNiceProcess, onUnlockPrivileged, onPinObject, onPinSettings, onSearchContextMenu, onBatchTerminate, onBatchNice, objectClassOrder, onObjectClassOrderChange, alertTempC, alertDiskPct, objectSearchHistory, onObjectSearchRecord, onObjectSearchHistoryClear, fileSearchHistory, onFileSearchRecord, onFileSearchHistoryClear, settingsSearchHistory, onSettingsSearchRecord, onSettingsSearchHistoryClear, searchRecentCount, onNetworkToggle, marqueeEnabled, pendingDrop, onPendingDropHandled, dashboardPinned, onDashboardPinItem, onDashboardRemovePin, onDashboardReorderPin, onDashboardPinObject, onMovePinAcross, showHomeStorageUsage, filePreviewEnabled, previewWidth, onPreviewWidthChange, pendingPropertiesPath, onPropertiesComplete, terminalOpen = false }: ExplorerTabProps) {
   const [currentPath, setCurrentPath] = useState(initialPath);
+  /**
+   * 本标签页的浏览历史（v3.0.1040）：仅内存，关闭标签页即销毁（不持久化）。
+   * `index` 指向当前页在栈中的位置；撤回 = 后退到 index-1 并导航，
+   * 导航后下方的 currentPath effect 发现栈顶已是该路径 → 不重复入栈。
+   */
+  const [tabHistory, setTabHistory] = useState<{ stack: string[]; index: number }>({
+    stack: [],
+    index: -1,
+  });
+  /** 浏览记录上限（设置值夹取到 5–30；非法值回落默认 10） */
+  const historyLimit = Math.min(
+    BACK_HISTORY_LIMIT_MAX,
+    Math.max(BACK_HISTORY_LIMIT_MIN, Math.round(backHistoryLimit) || 10),
+  );
+
+  // 所有导航（地址栏/侧边栏/双击/面包屑/外部 initialPath）最终都会更新
+  // currentPath——在此统一入栈；同路径连续不入栈（撤回/上级跳转后回落到
+  // 栈顶时同样命中该判断，不会把跳转当成新记录）。
+  useEffect(() => {
+    if (!currentPath) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 导航历史的同步入口
+    setTabHistory((h) => {
+      if (h.stack[h.index] === currentPath) return h;
+      const stack = h.stack.slice(0, h.index + 1);
+      stack.push(currentPath);
+      while (stack.length > historyLimit) stack.shift();
+      return { stack, index: stack.length - 1 };
+    });
+  }, [currentPath, historyLimit]);
+
+  // 上限调小时立即截断现有历史（保留最近 historyLimit 条）
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 同步设置变更
+    setTabHistory((h) => {
+      if (h.stack.length <= historyLimit) return h;
+      const drop = h.stack.length - historyLimit;
+      return { stack: h.stack.slice(drop), index: Math.max(0, h.index - drop) };
+    });
+  }, [historyLimit]);
+
   const [files, setFiles] = useState<IFile[]>([]);
   const [hoveredFile, setHoveredFile] = useState<IFile | null>(null);
   /** 回收站 files 目录真实路径（异步获取；混合路径模型下地址栏虚拟显示、
@@ -909,6 +955,20 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
 
   // eslint-disable-next-line react-hooks/refs -- keep ref in sync with latest handler
   loadPathRef.current = loadPath;
+
+  /** 撤回：回到本标签页上一次浏览的页面（无历史时按钮置灰，不会触发） */
+  const handleUndo = useCallback(() => {
+    if (tabHistory.index <= 0) return;
+    const target = tabHistory.stack[tabHistory.index - 1];
+    // 先把游标退一格，再导航——导航引起的 currentPath 变化会命中
+    // 「栈顶 == 当前路径」判断，不会把这次跳转记录成新页面
+    setTabHistory({ stack: tabHistory.stack, index: tabHistory.index - 1 });
+    void loadPath(target, true);
+  }, [loadPath, tabHistory]);
+
+  const showUpButton = backButtons.includes('up');
+  const showUndoButton = backButtons.includes('undo');
+  const canUndo = tabHistory.index > 0;
 
   // 挂载时获取回收站 files 目录真实路径（混合路径模型换算基准；
   // 虚拟子目录加载早于其到达时 loadPath 会兜底重拉一次）
@@ -1693,15 +1753,18 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
     const settingsParsed = settingsSearchParsed
       ? { cat: settingsSearchParsed.cat, sub: null }
       : (isSettingsPath(currentPath) ? parseSettingsPath(currentPath) : null);
-    if (
-      currentPath !== 'trash://'
-      && !(objectsParsed && objectsParsed.className === null)
-      && !(settingsParsed && settingsParsed.cat === null)
-    ) {
+    // v3.0.1040：返回/撤回按钮由设置控制显隐。仅当**存在可用的**按钮时
+    // 注册该站——置灰按钮不可聚焦，注册空站会让 Tab 循环卡在该站
+    // （focus() 无效 → 焦点停在原地 → 永远「先落到当前分区」回跳）。
+    if ((showUpButton && canNavigateUp(currentPath)) || (showUndoButton && tabHistory.index > 0)) {
       cleanups.push(registerKeyboardZone({
         id: 'topbar-up',
         focus: () => {
-          upZoneRef.current?.querySelector<HTMLElement>(TOP_BAR_BTN_SELECTOR)?.focus();
+          // 跳过置灰按钮（无上级/无历史）：disabled 元素 focus() 无效，
+          // 会让 Tab 循环卡在当前站
+          const first = Array.from(upZoneRef.current?.querySelectorAll<HTMLElement>(TOP_BAR_BTN_SELECTOR) ?? [])
+            .find((el) => !el.hasAttribute('disabled'));
+          first?.focus();
         },
       }));
     }
@@ -1722,7 +1785,7 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
     return () => {
       for (const fn of cleanups) fn();
     };
-  }, [isActive, currentPath]);
+  }, [isActive, currentPath, showUndoButton, showUpButton, tabHistory.index]);
 
   /**
    * 顶栏分区通用键盘处理（三个分区容器共用）：
@@ -1738,7 +1801,9 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
     // 处理——不拦截，否则编辑路径/关键词时方向键会被分区按钮循环劫走
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-    const btns = Array.from(container.querySelectorAll<HTMLElement>(TOP_BAR_BTN_SELECTOR));
+    // 置灰按钮不参与 ←/→ 循环（focus() 无效会卡住焦点）
+    const btns = Array.from(container.querySelectorAll<HTMLElement>(TOP_BAR_BTN_SELECTOR))
+      .filter((el) => !el.hasAttribute('disabled'));
     if (btns.length === 0) return;
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
@@ -1762,7 +1827,8 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
       el.click();
       requestAnimationFrame(() => {
         if (document.activeElement && document.activeElement !== document.body) return;
-        const fresh = Array.from(container.querySelectorAll<HTMLElement>(TOP_BAR_BTN_SELECTOR));
+        const fresh = Array.from(container.querySelectorAll<HTMLElement>(TOP_BAR_BTN_SELECTOR))
+          .filter((el) => !el.hasAttribute('disabled'));
         (fresh[idx] ?? fresh[0])?.focus();
       });
     }
@@ -2768,17 +2834,33 @@ export function ExplorerTab({ tabId, isActive, initialPath, onPathChange, onCont
             borderBottomColor: topBarWrapped ? 'var(--md-sys-color-outline-variant)' : 'transparent',
           }}
         >
-          {currentPath !== 'trash://'
-            && !(isObjectsPath(currentPath) && parseObjectsPath(currentPath)?.className === null)
-            && !(isSettingsPath(currentPath) && parseSettingsPath(currentPath)?.cat === null)
-            && !(isSettingsSearchPath(currentPath) && parseSettingsSearchPath(currentPath)?.cat === null)
-            && (
-              <span ref={upZoneRef} data-kb-zone="topbar-up" onKeyDown={handleTopBarKeyDown} style={{ display: 'inline-flex', flexShrink: 0 }}>
-                <IconButton onClick={handleUp} variant="standard">
+          {(showUndoButton || showUpButton) && (
+            <span ref={upZoneRef} data-kb-zone="topbar-up" onKeyDown={handleTopBarKeyDown} style={{ display: 'inline-flex', flexShrink: 0, gap: 4 }}>
+              {showUndoButton && (
+                <IconButton
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                  variant="standard"
+                  title={t('settings.back_button_undo')}
+                  ariaLabel={t('settings.back_button_undo')}
+                >
+                  {/* 撤回：Material Symbols 的 undo（带弧度的回退箭头） */}
+                  <Icon name="undo" />
+                </IconButton>
+              )}
+              {showUpButton && (
+                <IconButton
+                  onClick={handleUp}
+                  disabled={!canNavigateUp(currentPath)}
+                  variant="standard"
+                  title={t('settings.back_button_up')}
+                  ariaLabel={t('settings.back_button_up')}
+                >
                   <Icon name="arrow_upward" />
                 </IconButton>
-              </span>
-            )}
+              )}
+            </span>
+          )}
           <div ref={omnibarZoneRef} data-kb-zone="topbar-omnibar" onKeyDown={handleTopBarKeyDown} style={{ flex: 1, overflow: 'hidden', minWidth: effectiveSortCollapsed ? 0 : OMNIBAR_MIN_WIDTH_EXPANDED }}>
             <Omnibar
               currentPath={displayPath}

@@ -173,6 +173,9 @@ function sanitizeThemeSnapshot(input) {
  * （D-Bus 规范），故以 p/r 前缀。测试内请用 h.E2E_PORTAL_BUS_NAME /
  * h.E2E_FM1_BUS_NAME 作代理目标，勿再硬编码固定名。
  */
+/** 最近 window:new 调用的目标目录（null = 无参数新窗口；e2e 断言用） */
+const newWindowCalls = [];
+
 const E2E_BUS_TAG = `p${process.pid}.r${Math.random().toString(36).slice(2, 8)}`;
 const E2E_PORTAL_BUS_NAME = `org.freedesktop.impl.portal.desktop.hoshineko.e2e.${E2E_BUS_TAG}`;
 const E2E_FM1_BUS_NAME = `org.freedesktop.FileManager1.hoshineko.e2e.${E2E_BUS_TAG}`;
@@ -242,10 +245,12 @@ function registerIpc() {
       releasePinCalls.push([...mountpoints]);
     },
   );
+  // 新建窗口工厂：e2e 只记录调用参数（含「在新窗口打开」携带的目录），
+  // 不真正创建窗口——避免测试里多出无法回收的窗口；需要断言时读
+  // `h.newWindowCalls`。
   require(path.join(DIST_ELECTRON, 'handlers', 'window.js')).registerWindowHandlers(
     getWindows,
-    // 与 main.ts 同款接线：标题栏 v 菜单「新建窗口」工厂
-    () => { void createTestWindow({ argv: [] }); },
+    (targetPath) => { newWindowCalls.push(targetPath ?? null); },
   );
   require(path.join(DIST_ELECTRON, 'handlers', 'theme.js')).registerThemeHandlers();
   require(path.join(DIST_ELECTRON, 'handlers', 'picker.js')).registerPickerHandlers(
@@ -1244,6 +1249,7 @@ module.exports = {
   run,
   finish,
   tempDir,
+  newWindowCalls,
   makeFileTree,
   makeZip,
   minimalPdfBytes,

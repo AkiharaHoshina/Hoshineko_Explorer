@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import type { MdSwitch as MdSwitchElement } from '@material/web/switch/switch.js';
 import { Icon } from '../Icon';
 import { Button } from '../Button';
-import { OutlinedSelect, SelectOption, Switch } from '../md';
+import { Checkbox, OutlinedSelect, SelectOption, Switch } from '../md';
 import { t } from '../../i18n';
 
 /**
@@ -56,6 +56,66 @@ export const SettingsRow: React.FC<SettingsRowProps> = ({
     </div>
     {children}
   </div>
+);
+
+interface SettingsCheckboxGroupRowProps {
+  icon?: string;
+  label: React.ReactNode;
+  /** 副标题（可换行说明） */
+  sub?: React.ReactNode;
+  /** 设置搜索索引行 id */
+  rowId?: string;
+  /** 已勾选的值集合 */
+  value: string[];
+  /** 勾选变化（返回新的值集合；允许清空 = 两项都不显示） */
+  onChange: (v: string[]) => void;
+  /** 可选项（顺序即渲染顺序） */
+  options: Array<{ value: string; label: string }>;
+}
+
+/** 多选设置行（v3.0.1040）：右侧一组 md-checkbox 选项。
+ *  md-checkbox 纯展示（pointer-events:none + aria-hidden），交互由外层
+ *  role=checkbox 容器接管（与 OpenWithDialog 的同款模式），键盘 Space/Enter
+ *  可切换。 */
+export const SettingsCheckboxGroupRow: React.FC<SettingsCheckboxGroupRowProps> = ({
+  icon, label, sub, rowId, value, onChange, options,
+}) => (
+  <SettingsRow icon={icon} label={label} sub={sub} rowId={rowId}>
+    <div className="settings-checkbox-group">
+      {options.map((o) => {
+        const checked = value.includes(o.value);
+        const toggle = () => {
+          onChange(checked
+            ? value.filter((v) => v !== o.value)
+            : [...value, o.value]);
+        };
+        return (
+          <div
+            key={o.value}
+            className="settings-checkbox-option"
+            role="checkbox"
+            aria-checked={checked}
+            tabIndex={0}
+            onClick={toggle}
+            onKeyDown={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault();
+                toggle();
+              }
+            }}
+          >
+            <Checkbox
+              checked={checked}
+              tabIndex={-1}
+              style={{ pointerEvents: 'none' }}
+              aria-hidden="true"
+            />
+            <span>{o.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  </SettingsRow>
 );
 
 interface SettingsSelectRowProps {

@@ -42,6 +42,8 @@ const ukUA = {
 
   // ── 右键菜单 ──
   'context_menu.open': 'Відкрити',
+  'context_menu.open_new_tab': 'Відкрити в новій вкладці',
+  'context_menu.open_new_window': 'Відкрити в новому вікні',
   'context_menu.open_with': 'Відкрити за допомогою...',
   'context_menu.open_terminal': 'Відкрити у вбудованому терміналі',
   'context_menu.open_in_terminal': 'Відкрити в стандартному терміналі',
@@ -244,6 +246,12 @@ const ukUA = {
   'settings.icon_size': 'Розмір піктограм',
   'settings.ui_scale': 'Масштаб інтерфейсу',
   'settings.filled_icons': 'Залиті піктограми',
+  'settings.back_buttons': 'Кнопки «Назад»',
+  'settings.back_buttons_desc': 'Виберіть, які кнопки повернення показувати ліворуч від адресного рядка',
+  'settings.back_button_up': 'На рівень вище',
+  'settings.back_button_undo': 'Скасувати перехід',
+  'settings.back_history_limit': 'Ліміт історії переходів',
+  'settings.back_history_limit_desc': 'Скільки записів історії зберігається в пам’яті для кожної вкладки (5–30; очищується після закриття вкладки)',
   'settings.sort_auto_collapse': 'Автозгортання кнопок адресного рядка',
   'settings.preview_collapse': 'Згорнути попередній перегляд',
   'settings.preview_expand': 'Розгорнути попередній перегляд',

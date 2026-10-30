@@ -19,6 +19,8 @@ const jaJP = {
 
   // ── 右键菜单 ──
   'context_menu.open': '開く',
+  'context_menu.open_new_tab': '新しいタブで開く',
+  'context_menu.open_new_window': '新しいウィンドウで開く',
   'context_menu.open_with': 'プログラムから開く...',
   'context_menu.open_terminal': '内蔵ターミナルで開く',
   'context_menu.open_in_terminal': 'デフォルトの端末で開く',
@@ -205,6 +207,12 @@ const jaJP = {
   'settings.icon_size': 'アイコンのサイズ',
   'settings.ui_scale': 'UI スケール',
   'settings.filled_icons': '塗りつぶしアイコン',
+  'settings.back_buttons': '戻るボタン設定',
+  'settings.back_buttons_desc': 'アドレスバー左側に表示する戻るボタンを選択',
+  'settings.back_button_up': '上の階層へ',
+  'settings.back_button_undo': '元に戻す',
+  'settings.back_history_limit': '閲覧履歴の保存上限',
+  'settings.back_history_limit_desc': 'タブごとにメモリに保持する閲覧履歴の件数（5〜30、タブを閉じると消去）',
   'settings.sort_auto_collapse': 'アドレスバーのボタンを自動で折りたたむ',
   'settings.preview_collapse': 'プレビューを折りたたむ',
   'settings.preview_expand': 'プレビューを展開',

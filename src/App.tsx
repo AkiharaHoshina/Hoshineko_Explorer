@@ -15,7 +15,13 @@ import { Sidebar, type SidebarPinnedItem } from "./components/Sidebar";
 import type { PinnedItem } from "./components/Dashboard";
 import { Icon } from "./components/Icon";
 /* eslint-disable react-hooks/preserve-manual-memoization -- React Compiler 对超大型组件（AppContent ~3300 行，review 26 设置页面化后再度越过阈值）bail out，依赖数组由源码人工维护（该规则仅在编译跳过时审计） */
-import { SettingsContext, type DragFileAction } from "./contexts/SettingsContext";
+import {
+  SettingsContext,
+  DEFAULT_BACK_BUTTONS,
+  DEFAULT_BACK_HISTORY_LIMIT,
+  type BackButtonKind,
+  type DragFileAction,
+} from "./contexts/SettingsContext";
 import { ContextMenu } from "./components/ContextMenu";
 import type { ContextMenuItem } from "./components/ContextMenu";
 import { HoshinekoNyaDialog } from "./components/HoshinekoNyaDialog";
@@ -791,6 +797,16 @@ function AppContent() {
   const [filledIcons, setFilledIcons] = useLocalStorage<boolean>(
     "settings.filledIcons",
     false,
+  );
+  /** 返回按钮显示项（多选；默认仅「返回上级」） */
+  const [backButtons, setBackButtons] = useLocalStorage<BackButtonKind[]>(
+    "settings.backButtons",
+    DEFAULT_BACK_BUTTONS,
+  );
+  /** 每标签页浏览记录上限（5–30，仅内存） */
+  const [backHistoryLimit, setBackHistoryLimit] = useLocalStorage<number>(
+    "settings.backHistoryLimit",
+    DEFAULT_BACK_HISTORY_LIMIT,
   );
   /**
    * 排序/分组偏好（持久化于 settings.*，跨窗口同步）：
@@ -1782,6 +1798,8 @@ function AppContent() {
     setIconSize(48);
     setUiScale(100);
     setFilledIcons(false);
+    setBackButtons(DEFAULT_BACK_BUTTONS);
+    setBackHistoryLimit(DEFAULT_BACK_HISTORY_LIMIT);
     setThemeConfig(null);
     setDarkMode(null);
     setTitleBarMode(null);
@@ -1815,6 +1833,8 @@ function AppContent() {
     setIconSize,
     setUiScale,
     setFilledIcons,
+    setBackButtons,
+    setBackHistoryLimit,
     setThemeConfig,
     setDarkMode,
     setTitleBarMode,
@@ -2235,6 +2255,25 @@ function AppContent() {
           closeContextMenu();
         },
       },
+      // v3.0.1040：真实目录额外提供「在新标签页/新窗口打开」。
+      // 虚拟路径（objects:// 等）不提供——它们不是文件系统目录。
+      ...(item.isDirectory && item.path.startsWith('/')
+        ? [{
+          label: t('context_menu.open_new_tab'),
+          icon: 'tab',
+          action: () => {
+            handleAddTab(item.path);
+            closeContextMenu();
+          },
+        }, {
+          label: t('context_menu.open_new_window'),
+          icon: 'open_in_new',
+          action: () => {
+            void window.electron.newWindow(item.path);
+            closeContextMenu();
+          },
+        }]
+        : []),
       // 内置终端以目录为 cwd 打开——文件无「终端目录」语义
       // （chdir(2) failed: Not a directory），仅目录显示此项
       ...(item.isDirectory
@@ -2727,6 +2766,10 @@ function AppContent() {
         setIconSize,
         filledIcons,
         setFilledIcons,
+        backButtons,
+        setBackButtons,
+        backHistoryLimit,
+        setBackHistoryLimit,
         marqueeEnabled,
         setMarqueeEnabled,
         sortControlsAutoCollapse,
@@ -2886,6 +2929,8 @@ function AppContent() {
                     iconSize={iconSize}
                     viewMode={viewMode}
                     filledIcons={filledIcons}
+                    backButtons={backButtons}
+                    backHistoryLimit={backHistoryLimit}
                     sortBy={sortBy}
                     sortOrder={sortOrder}
                     groupingEnabled={groupingEnabled}

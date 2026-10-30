@@ -518,7 +518,8 @@ export interface IElectronAPI {
     closeWindow: () => Promise<void>;
     isWindowMaximized: () => Promise<boolean>;
     /** 新建窗口（标题栏 v 菜单项；共享同一主进程后端） */
-    newWindow: () => Promise<void>;
+    /** 新窗口；targetPath 为绝对目录时以其为启动路径（浏览历史为空） */
+    newWindow: (targetPath?: string) => Promise<void>;
     /** 订阅最大化状态变化（标题栏 最大化/还原 图标切换） */
     onWindowMaximizeChange: (callback: (maximized: boolean) => void) => () => void;
     startDrag: (paths: string | string[], files?: DragFileMeta[], object?: boolean) => void;

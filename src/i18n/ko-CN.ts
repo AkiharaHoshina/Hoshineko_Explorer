@@ -20,6 +20,8 @@ const koCN = {
 
   // ── 우클릭 메뉴 ──
   'context_menu.open': '열기',
+  'context_menu.open_new_tab': '새 탭에서 열기',
+  'context_menu.open_new_window': '새 창에서 열기',
   'context_menu.open_with': '다른 프로그램으로 열기...',
   'context_menu.open_terminal': '내장 단말기에서 열기',
   'context_menu.open_in_terminal': '기본 단말기에서 열기',
@@ -206,6 +208,12 @@ const koCN = {
   'settings.icon_size': '아이콘 크기',
   'settings.ui_scale': 'UI 배율',
   'settings.filled_icons': '채워진 아이콘',
+  'settings.back_buttons': '뒤로 버튼 설정',
+  'settings.back_buttons_desc': '주소 표시줄 왼쪽에 표시할 뒤로 버튼 선택',
+  'settings.back_button_up': '상위로 이동',
+  'settings.back_button_undo': '실행 취소',
+  'settings.back_history_limit': '방문 기록 저장 한도',
+  'settings.back_history_limit_desc': '탭마다 메모리에 보관할 방문 기록 수(5~30, 탭을 닫으면 삭제)',
   'settings.sort_auto_collapse': '주소 표시줄 버튼 자동 접기',
   'settings.preview_collapse': '미리보기 접기',
   'settings.preview_expand': '미리보기 펼치기',

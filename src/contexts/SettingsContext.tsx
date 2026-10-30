@@ -59,6 +59,17 @@ export interface SettingsContextValue {
    */
   dragFileAction: DragFileAction;
   setDragFileAction: (v: DragFileAction) => void;
+  /**
+   * 返回按钮显示项（设置 → 文件 → 外观 → 返回按钮设置，多选）：
+   * `'up'` = 返回上级（地址栏左侧升箭头，无可返回时置灰）；
+   * `'undo'` = 撤回（更左，回到本标签页上一次浏览的页面，无历史时置灰）。
+   * 默认 `['up']`；隐藏的按钮仍持续记录历史。
+   */
+  backButtons: BackButtonKind[];
+  setBackButtons: (v: BackButtonKind[]) => void;
+  /** 每标签页浏览记录保存上限（5–30，默认 10；仅内存，关标签页即清） */
+  backHistoryLimit: number;
+  setBackHistoryLimit: (v: number) => void;
   showHiddenFiles: boolean;
   setShowHiddenFiles: (v: boolean) => void;
   /**
@@ -155,6 +166,16 @@ export interface SettingsContextValue {
 
 /** 应用内拖拽文件行为（见 SettingsContextValue.dragFileAction） */
 export type DragFileAction = 'ask' | 'copy' | 'move';
+
+/** 返回按钮显示项（见 SettingsContextValue.backButtons） */
+export type BackButtonKind = 'up' | 'undo';
+
+/** 返回按钮默认显示项：仅「返回上级」 */
+export const DEFAULT_BACK_BUTTONS: BackButtonKind[] = ['up'];
+/** 浏览记录上限：默认值与允许范围 */
+export const DEFAULT_BACK_HISTORY_LIMIT = 10;
+export const BACK_HISTORY_LIMIT_MIN = 5;
+export const BACK_HISTORY_LIMIT_MAX = 30;
 
 /** 设置中枢 Context（App 提供；设置页/二级对话框消费） */
 export const SettingsContext = createContext<SettingsContextValue | null>(null);

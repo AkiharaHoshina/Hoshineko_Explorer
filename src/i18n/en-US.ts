@@ -19,6 +19,8 @@ const enUS = {
 
   // ── 右键菜单 ──
   'context_menu.open': 'Open',
+  'context_menu.open_new_tab': 'Open in new tab',
+  'context_menu.open_new_window': 'Open in new window',
   'context_menu.open_with': 'Open with...',
   'context_menu.open_terminal': 'Open in built-in terminal',
   'context_menu.open_in_terminal': 'Open in default terminal',
@@ -216,6 +218,12 @@ const enUS = {
   'settings.icon_size': 'Icon size',
   'settings.ui_scale': 'UI Scale',
   'settings.filled_icons': 'Filled icons',
+  'settings.back_buttons': 'Back buttons',
+  'settings.back_buttons_desc': 'Choose which back buttons appear left of the address bar',
+  'settings.back_button_up': 'Go up',
+  'settings.back_button_undo': 'Undo',
+  'settings.back_history_limit': 'Browsing history limit',
+  'settings.back_history_limit_desc': 'Number of history entries kept per tab in memory (5–30; cleared when the tab closes)',
   'settings.sort_auto_collapse': 'Auto-collapse address bar buttons',
   'settings.preview_collapse': 'Collapse preview',
   'settings.preview_expand': 'Expand preview',

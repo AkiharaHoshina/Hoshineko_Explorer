@@ -18,7 +18,7 @@ const h = require('./harness.cjs');
     // 导航栏设置按钮 → settings:// 根（分类卡片页）
     await h.openSettingsPage(win);
     const cardCount = await h.js(win, `document.querySelectorAll('.settings-category-card').length`);
-    h.assert.strictEqual(cardCount.value, 11, '设置根页应有 11 张分类卡片（含内建终端）');
+    h.assert.strictEqual(cardCount.value, 9, '设置根页应有 9 张分类卡片（实验设置无常规入口，不渲染卡片）');
 
     // 分类卡片 → 文件页（外观预览挂顶 + 行为 + 文件预览分区）
     await h.openSettingsPage(win, `/文件|Files/`);
@@ -70,7 +70,7 @@ const h = require('./harness.cjs');
       return { betaIdx, verIdx, betaVal };
     })()`);
     h.assert.ok(betaInfo.value.betaIdx >= 0 && betaInfo.value.betaIdx < betaInfo.value.verIdx, `测试阶段行应位于版本行之前（实际 ${JSON.stringify(betaInfo.value)}）`);
-    h.assert.strictEqual(betaInfo.value.betaVal, 'Beta', `测试阶段值应为 Beta（实际 ${betaInfo.value.betaVal}）`);
+    h.assert.strictEqual(betaInfo.value.betaVal, 'Capriccio', `测试阶段值应为 Capriccio（实际 ${betaInfo.value.betaVal}）`);
   });
 
   h.finish();

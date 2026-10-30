@@ -19,6 +19,8 @@ const zhHK = {
 
   // ── 右鍵選單 ──
   'context_menu.open': '開啟',
+  'context_menu.open_new_tab': '在新分頁開啟',
+  'context_menu.open_new_window': '在新視窗開啟',
   'context_menu.open_with': '開啟方式...',
   'context_menu.open_terminal': '於內置終端機開啟',
   'context_menu.open_in_terminal': '於預設終端機中開啟',
@@ -205,6 +207,12 @@ const zhHK = {
   'settings.icon_size': '圖示大小',
   'settings.ui_scale': '介面縮放',
   'settings.filled_icons': '實心圖示',
+  'settings.back_buttons': '返回按鈕設定',
+  'settings.back_buttons_desc': '選擇在網址列左側顯示哪些返回按鈕',
+  'settings.back_button_up': '返回上層',
+  'settings.back_button_undo': '撤回',
+  'settings.back_history_limit': '瀏覽記錄保存上限',
+  'settings.back_history_limit_desc': '每個分頁在記憶體中保留的瀏覽記錄條數（5–30，關閉分頁後清除）',
   'settings.sort_auto_collapse': '網址列按鈕自動收縮',
   'settings.preview_collapse': '收合預覽',
   'settings.preview_expand': '展開預覽',
